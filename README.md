@@ -1,20 +1,8 @@
 # NootedRed ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ChefKissInc/NootedRed/main.yml?branch=master&logo=github&style=for-the-badge) [![Release Badge](https://img.shields.io/github/v/release/ChefKissInc/NootedRed?include_prereleases&style=for-the-badge&sort=semver&color=blue)](https://github.com/ChefKissInc/NootedRed/releases) [![Downloads Badge](https://img.shields.io/github/downloads/ChefKissInc/NootedRed/total?style=for-the-badge)](https://github.com/ChefKissInc/NootedRed/releases/latest) ![Written by humans, not AI](https://img.shields.io/badge/written_by_humans-not_ai-blue?style=for-the-badge)
 
-> [!CAUTION]
-> Use of Artificial Intelligence / Large Language Models on this repository, its copies or derived works is explicitly forbidden.
->
-> This includes, but is not limited to, training, analysis, or modification.
 
-> [!CAUTION]
-> Please consider donating: donations help me stay alive and pay costs; if the Hackintosh projects don't receive funding, I will (have to) stop working on them.
->
-> PayPal or credit/debit card: https://ko-fi.com/chefkiss
->
-> BTC: `bc1qgu56kptepex2csuzl5nhzc4vxuj8c6ggjzhcem`
->
-> SOL: `4PJU3iB5rimN9BNcpzduvmTnptJyedZiAd23so33SAdi`
->
-> ETH: `0x038A25849c23Bc5A736484351a8B6Ad71bC46676`
+
+
 
 The macOS kernel extension for GPU bug fixes, QoL improvements, and extended hardware support.
 
