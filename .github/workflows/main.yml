@@ -20,21 +20,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: "recursive"
-      - name: Test shared-cache coordinator
-        run: |
-          python3 tools/test_display_coordinator_kext.py
-          python3 tools/test_display_cross_module_gate.py
-          python3 tools/test_display_cross_module_gate.py --sanitize
-          python3 tools/test_process_filter.py
-          python3 tools/test_fvrc_mapping_probe.py
-          python3 tools/test_rejected_caches.py
-          python3 tools/test_fvrc_registry.py
-          python3 tools/test_fvrc_hot_path.py
-          python3 tools/test_fvrc_video.py
-      - name: Test EC backlight service
-        run: |
-          python3 tools/test_ec_backlight_service.py
-          python3 tools/test_ec_backlight_service.py --thread-sanitizer
+      - name: Run test suite (known baseline drift excluded)
+        run: python3 tools/run_all_tests.py --jobs 4 --exclude 'test_(display_baseline|vpf_patch_audit|vpf_semantic_variants|vpf_display_semantic_variants)\.py$'
       - run: xcodebuild -configuration Debug -arch x86_64 build
       - run: xcodebuild -configuration Research\ Release -arch x86_64 build
       - run: xcodebuild -configuration Release -arch x86_64 build

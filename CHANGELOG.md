@@ -1,5 +1,33 @@
 # Change log
 
+## v0.9.0 (15/11/2026)
+
+基于上游 2026-10-10 快照的实验性扩展版本。新增功能默认关闭，需要启动参数显式启用。
+
+### Enhancements
+
+- 新增用户态共享缓存补丁框架（VPF / DVPF）：清单描述、完整字节与引用核验、依赖规划、能力账本、COW 页面事务与失败回滚。
+- 新增显示/视频补丁协调器，按 `vm_map` 串行执行并复用共享缓存头读取结果。
+- 新增 VCN 2.2 硬件视频解码与编码接入（`-NRedVideoFix`），覆盖 `1636 / 1638 / 15E7 / 164C`，含 FairPlay 客户端策略。
+- 新增 EC 背光服务 `NRedECBacklight`（`NRedECFix=1`），通过 ACPI `PNP0C14` 与 WMI `WMAA` 控制背光。
+- 显示修复统一为 `-NRedDisplayFix`，覆盖 OpenGL SE/CU、DualQuad、Metal SRD、LegacyBlend、ComputeScratch 与 SubmitGuard，并适配 Darwin 23 / 24 / 25。
+- 新增进程过滤，跳过不链接 GPU/媒体框架的基础系统命令；新增 FVRC 拒绝缓存与已完成补丁 proof，降低每次 exec 的开销。
+- 新增内核显示证据属性（`KernelDisplayEvidence`），记录 kext、UUID、启动会话与关键判断结果。
+- 工程化：改用 Xcode 工程与 `Lilu` / `MacKernelSDK` 子模块；CI 增加 clang 静态分析任务，测试脚本统一由 `tools/run_all_tests.py` 驱动。
+
+### Bug Fixes
+
+- 修正 `OSBundleLibraries`：EC 服务改为依赖 `com.apple.iokit.IOACPIFamily`，不再错误声明 `AppleACPIPlatform`，避免 OpenCore 注入时符号解析失败。
+- 修正 X5000 Compute 提交虚表 Hook 的偏移，跳过 Itanium ABI 的 `offset-to-top` 与 RTTI 槽位，并在写入前核对原函数地址。
+- 修正 `allocateHWEngines` 的分配失败路径，失败时正确释放已分配引擎并返回 false，不再写入空指针。
+- 背光亮度状态改用原子读写，避免与 EC 服务竞争。
+- 移除上游 CI 中针对非官方仓库的强制中断步骤。
+
+### Notes
+
+- 版本号由 `0.8.10` 提升至 `0.9.0`，与 `MODULE_VERSION` 保持一致。
+- VCN 与显示修复的部分站点只有离线证据，未完成全部机型实机验收。
+
 ## v0.8.10 (15/05/2026)
 
 ### Enhancements

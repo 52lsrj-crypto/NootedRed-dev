@@ -44,3 +44,7 @@ clang_analyze/
 # Local trail/graft index and its ripgrep override — not part of the kext.
 /graft/
 /.ignore
+
+# Python 测试产生的字节码缓存
+__pycache__/
+*.py[cod]

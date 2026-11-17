@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+*.bin binary
+*.png binary
+*.jpg binary
+*.icns binary
+*.zip binary
+*.kext binary
+*.dSYM binary
+
+*.pbxproj text eol=lf
+*.plist text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
