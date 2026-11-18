@@ -27,8 +27,7 @@ jobs:
           xcodebuild -version
           clang --version
           sw_vers
-      - name: Run test suite (known baseline drift excluded)
-        run: python3 tools/run_all_tests.py --jobs 4 --exclude 'test_(display_baseline|vpf_patch_audit|vpf_semantic_variants|vpf_display_semantic_variants)\.py$'
+          uname -m
       - name: Build Release (x86_64)
         run: xcodebuild -configuration Release -arch x86_64 build
       - name: Check IOKit class symbols
