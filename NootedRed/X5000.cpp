@@ -32,6 +32,14 @@ static const UInt8 kChannelTypesPattern[] = {0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
 
 static const UInt8 kHwlConvertChipFamilyPattern[] = {0x81, 0xFE, 0x8D, 0x00, 0x00, 0x00, 0x0F};
 
+// Renoir 的 compute 提交路径在安装 GFXOFF 通知 Hook 后出现过 computeUQ 通道超时，
+// 默认跳过；需要实机对照时用 -NRedComputeSubmit 显式开启，-NRedNoComputeSubmit 全局关闭。
+static bool computeSubmitHookEnabled()
+{
+    if (checkKernelArgument("-NRedNoComputeSubmit")) { return false; }
+    return !NRed::singleton().getAttributes().isRenoir() || checkKernelArgument("-NRedComputeSubmit");
+}
+
 // Make for loop stop after one SDMA engine.
 static const UInt8 kStartHWEnginesOriginal[] = {0x40, 0x83, 0xF0, 0x02};
 static const UInt8 kStartHWEnginesMask[]     = {0xF0, 0xFF, 0xF0, 0xFF};
@@ -165,9 +173,6 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         {"__ZN26AMDRadeonX5000_AMDHardware14startHWEnginesEv", orgStartHWEngines},
         {"__ZN30AMDRadeonX5000_AMDGFX9Hardware32setupAndInitializeHWCapabilitiesEv",
          this->orgGFX9SetupAndInitializeHWCapabilities},
-        {"__ZTV39AMDRadeonX5000_AMDGFX9PM4ComputeChannel", pm4ComputeChannelVT},
-        {"__ZN30AMDRadeonX5000_AMDPM4HWChannel19submitCommandBufferEP30AMD_SUBMIT_COMMAND_BUFFER_INFO",
-         this->orgPM4SubmitCommandBuffer},
     };
     PANIC_COND(!PenguinWizardry::PatternSolveRequest::solveAll(patcher, id, solveRequests, slide, size), "X5000",
                "Failed to resolve symbols");
@@ -196,7 +201,20 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
     PANIC_COND(!PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, requests, slide, size), "X5000",
                "Failed to route symbols");
 
-    if (currentKernelVersion() >= MACOS_11) {
+    if (currentKernelVersion() >= MACOS_11 && !computeSubmitHookEnabled()) {
+        NRed::singleton().setProp32("NRedKernelComputeHook", 0);
+        SYSLOG("X5000", "Compute submit hook disabled for this device; GFXOFF notification skipped");
+    }
+    else if (currentKernelVersion() >= MACOS_11) {
+        PenguinWizardry::PatternSolveRequest vtableRequest{"__ZTV39AMDRadeonX5000_AMDGFX9PM4ComputeChannel",
+                                                            pm4ComputeChannelVT};
+        PANIC_COND(!vtableRequest.solve(patcher, id, slide, size), "X5000",
+                   "Failed to resolve PM4 compute channel vtable");
+        PenguinWizardry::PatternSolveRequest submitRequest{
+            "__ZN30AMDRadeonX5000_AMDPM4HWChannel19submitCommandBufferEP30AMD_SUBMIT_COMMAND_BUFFER_INFO",
+            this->orgPM4SubmitCommandBuffer};
+        PANIC_COND(!submitRequest.solve(patcher, id, slide, size), "X5000",
+                   "Failed to resolve PM4 submit command buffer");
         PenguinWizardry::PatternSolveRequest solveRequest{"__ZN30AMDRadeonX5000_AMDGFX9Hardware15notifyGfxAccessEv",
                                                           this->notifyGfxAccess};
         PANIC_COND(!solveRequest.solve(patcher, id, slide, size), "X5000", "Failed to resolve notifyGfxAccess");
@@ -204,6 +222,7 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         auto* const pm4ComputeChannelVTable = static_cast<UInt8*>(pm4ComputeChannelVT) + 2 * sizeof(void*);
         if (this->hwChannelSubmitCommandBuffer(pm4ComputeChannelVTable) != this->orgPM4SubmitCommandBuffer) {
             KernelDisplayEvidence::recordComputeVTable(false);
+            NRed::singleton().setProp32("NRedKernelComputeHook", 2);
             SYSLOG("X5000", "Compute submit hook skipped: vtable slot does not match resolved symbol");
         }
         else {
@@ -213,6 +232,7 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
             this->hwChannelSubmitCommandBuffer(pm4ComputeChannelVTable) =
                 reinterpret_cast<mach_vm_address_t>(computeSubmitCommandBuffer);
             MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
+            NRed::singleton().setProp32("NRedKernelComputeHook", 1);
         }
         KernelDisplayEvidence::publish();
     }
@@ -316,19 +336,28 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
 bool X5000::allocateHWEngines(void* const self)
 {
     // 原生 init 在返回 false 时中止，free 释放引擎槽内的对象；核心引擎全部成功后才写入槽位。
+    // 若中止会让 WindowServer 永远停在 IOKitWaitQuiet，可用 -NRedLegacyEngineAlloc 回退旧行为先进入系统。
+    const bool legacy = checkKernelArgument("-NRedLegacyEngineAlloc");
     [[clang::suppress]]
     auto* const pm4 = singleton().pm4EngineMC->alloc();
     if (!pm4) {
         NRed::singleton().setProp32("NRedHWEngineAllocFailed", 1);
-        return false;
+        if (!legacy) { return false; }
+        singleton().pm4EngineField(self)   = nullptr;
+        singleton().sdma0EngineField(self) = nullptr;
+        SYSLOG("X5000", "PM4 engine allocation failed; continuing with legacy layout");
+        return true;
     }
     [[clang::suppress]]
     auto* const sdma0 = singleton().sdmaEngineMC->alloc();
     if (!sdma0) {
-        // PM4 尚未写入槽位，free 不会再次释放。
         pm4->release();
         NRed::singleton().setProp32("NRedHWEngineAllocFailed", 2);
-        return false;
+        if (!legacy) { return false; }
+        singleton().pm4EngineField(self)   = nullptr;
+        singleton().sdma0EngineField(self) = nullptr;
+        SYSLOG("X5000", "SDMA0 engine allocation failed; continuing with legacy layout");
+        return true;
     }
     singleton().pm4EngineField(self)   = pm4;
     singleton().sdma0EngineField(self) = sdma0;
@@ -440,7 +469,9 @@ UInt32 X5000::wrapHwlConvertChipFamily(void* const self, const UInt32 family, co
 
 UInt32 X5000::computeSubmitCommandBuffer(void* const self, void* const info)
 {
-    singleton().notifyGfxAccess(singleton().hwChannelHWInterfaceField(self));
+    if (singleton().notifyGfxAccess != nullptr) {
+        singleton().notifyGfxAccess(singleton().hwChannelHWInterfaceField(self));
+    }
     return FunctionCast(computeSubmitCommandBuffer, singleton().orgPM4SubmitCommandBuffer)(self, info);
 }
 

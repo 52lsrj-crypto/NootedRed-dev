@@ -73,6 +73,10 @@ struct MachInfo {
     }
 };
 struct KernelPatcher { static constexpr int kernelWriteLock = 0; };
+struct NRed {
+    static NRed& singleton() { static NRed instance; return instance; }
+    void setProp32(const char*, unsigned) {}
+};
 static unsigned evidenceMatched = 0, evidenceMismatched = 0, evidencePublished = 0;
 namespace KernelDisplayEvidence {
     inline void recordComputeVTable(bool matched) { (matched ? evidenceMatched : evidenceMismatched)++; }

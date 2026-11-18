@@ -8,6 +8,19 @@
 | `-NRedVideoFix` | VCN 硬件视频加速，包含现有解码和编码路径 | VCN 桥接关闭 |
 | `NRedECFix=1` | 使用固件报告的 EC 背光来源 | EC 服务关闭 |
 
+## 诊断与救援参数
+
+| 参数 | 作用 | 默认 |
+| --- | --- | --- |
+| `-NRedNoComputeSubmit` | 不安装 X5000 compute 提交虚表 Hook（同时跳过 `notifyGfxAccess`） | Renoir 默认不安装 |
+| `-NRedComputeSubmit` | 在 Renoir 上强制安装 compute 提交 Hook | 关闭 |
+| `-NRedLegacyEngineAlloc` | PM4／SDMA0 引擎分配失败时仍继续初始化，用于救援启动卡死（空引擎槽可能导致后续 panic） | 关闭 |
+
+Renoir（`0x15E7 / 0x1636 / 0x1638 / 0x164C`）默认跳过 compute 提交 Hook。该 Hook 每次 compute 提交都会调用
+`AMDGFX9Hardware::notifyGfxAccess`，而 4800U 上出现过 `computeUQ` 通道超时与 WindowServer watchdog。
+受影响设备可先保持默认；需要做 GFXOFF 对照实验时再加 `-NRedComputeSubmit`。
+`NRedKernelComputeHook` 记录安装结果：`0` 按策略关闭、`1` 已安装、`2` 虚表槽位与符号不匹配而跳过。
+
 三项均启用的启动参数：
 
 ```text
