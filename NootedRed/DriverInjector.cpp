@@ -6,6 +6,8 @@
 #include <DriverInjector.hpp>
 #include <Headers/kern_patcher.hpp>
 #include <Headers/kern_util.hpp>
+#include <NRed.hpp>
+#include <PenguinWizardry/PatcherPlus.hpp>
 #include <libkern/OSTypes.h>
 #include <libkern/c++/OSArray.h>
 #include <libkern/c++/OSDictionary.h>
@@ -41,6 +43,13 @@ DriverInjector& DriverInjector::singleton() { return moduleInstance; }
 
 void DriverInjector::processPatcher(KernelPatcher& patcher)
 {
+    const auto addDrivers = patcher.solveSymbol(KernelPatcher::KernelID, "__ZN11IOCatalogue10addDriversEP7OSArrayb");
+    patcher.clearError();
+    if (PenguinWizardry::isShortRouted(addDrivers)) {
+        NRed::singleton().setProp32("NRedDriverInjectorRouteConflict", 1);
+        SYSLOG("DriverInjector", "addDrivers already short-routed by another plugin; skipping personality injection");
+        return;
+    }
     KernelPatcher::RouteRequest request{"__ZN11IOCatalogue10addDriversEP7OSArrayb", wrapAddDrivers,
                                         this->orgAddDrivers};
     PANIC_COND(!patcher.routeMultipleLong(KernelPatcher::KernelID, &request, 1), "DriverInjector",

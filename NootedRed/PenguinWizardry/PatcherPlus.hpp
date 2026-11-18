@@ -9,6 +9,15 @@
 namespace PenguinWizardry
 {
 
+    // Lilu 的 SmallJumpPrefix (0xE9) 与编译器短跳 (0xEB) 都无法与后续 Long 路由链式共存；
+    // 路由前检测可避免 Lilu 在 multiroute 检查中直接 panic。
+    inline bool isShortRouted(const mach_vm_address_t address)
+    {
+        if (address == 0) { return false; }
+        const auto* const code = reinterpret_cast<const UInt8*>(address);
+        return code[0] == 0xE9 || code[0] == 0xEB;
+    }
+
     struct PatternSolveRequest : KernelPatcher::SolveRequest
     {
         const UInt8 *const pattern{nullptr}, *const mask{nullptr};

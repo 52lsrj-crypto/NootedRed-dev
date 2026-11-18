@@ -5,6 +5,8 @@
 
 #include <Headers/kern_patcher.hpp>
 #include <Headers/kern_util.hpp>
+#include <NRed.hpp>
+#include <PenguinWizardry/PatcherPlus.hpp>
 #include <PenguinWizardry/RuntimeMC.hpp>
 #include <libkern/OSReturn.h>
 #include <libkern/c++/OSArray.h>
@@ -22,8 +24,15 @@ static RuntimeVFTBase mcVft;
 
 void PenguinWizardry::RuntimeMCManager::processPatcher(KernelPatcher& patcher)
 {
+    const auto postModLoad = patcher.solveSymbol(KernelPatcher::KernelID, "__ZN11OSMetaClass11postModLoadEPv");
+    patcher.clearError();
+    if (PenguinWizardry::isShortRouted(postModLoad)) {
+        NRed::singleton().setProp32("NRedRuntimeMCRouteConflict", 1);
+        SYSLOG("RuntimeMC", "postModLoad already short-routed by another plugin; skipping meta class injection");
+        return;
+    }
     KernelPatcher::RouteRequest request{"__ZN11OSMetaClass11postModLoadEPv", wrapPostModLoad, this->orgPostModLoad};
-    PANIC_COND(!patcher.routeMultiple(KernelPatcher::KernelID, &request, 1), "RuntimeMC",
+    PANIC_COND(!patcher.routeMultipleLong(KernelPatcher::KernelID, &request, 1), "RuntimeMC",
                "Failed to route `postModLoad`");
     mcVft.init(MetaClassVT + 2);
 }

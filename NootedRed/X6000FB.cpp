@@ -241,7 +241,7 @@ void X6000FB::processKext(KernelPatcher& patcher, size_t id, mach_vm_address_t s
 
         KernelPatcher::RouteRequest request{"__ZN34AMDRadeonX6000_AmdRadeonController7powerUpEv", wrapControllerPowerUp,
                                             this->orgControllerPowerUp};
-        PANIC_COND(!patcher.routeMultiple(id, &request, 1, slide, size), "X6000FB", "Failed to route powerUp");
+        PANIC_COND(!patcher.routeMultipleLong(id, &request, 1, slide, size), "X6000FB", "Failed to route powerUp");
 
         const PenguinWizardry::MaskedLookupPatch patches[] = {
             {&kextRadeonX6000Framebuffer, kControllerPowerUpOriginal, kControllerPowerUpOriginalMask,
@@ -297,7 +297,7 @@ void X6000FB::processKext(KernelPatcher& patcher, size_t id, mach_vm_address_t s
         KernelPatcher::RouteRequest request{
             "__ZN32AMDRadeonX6000_AmdRegisterAccess20createRegisterAccessERNS_8InitDataE", wrapCreateRegisterAccess,
             this->orgCreateRegisterAccess};
-        PANIC_COND(!patcher.routeMultiple(id, &request, 1, slide, size), "X6000FB",
+        PANIC_COND(!patcher.routeMultipleLong(id, &request, 1, slide, size), "X6000FB",
                    "Failed to route createRegisterAccess");
     }
 

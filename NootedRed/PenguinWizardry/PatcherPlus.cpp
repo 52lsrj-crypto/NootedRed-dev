@@ -157,7 +157,7 @@ bool PenguinWizardry::PatternRouteRequest::route(KernelPatcher& patcher, const s
     // Workaround as patcher internals will attempt to resolve
     // the symbol without checking if the `from` field is 0.
     this->symbol = nullptr;
-    return patcher.routeMultiple(id, this, 1, start, size);
+    return patcher.routeMultipleLong(id, this, 1, start, size);
 }
 
 bool PenguinWizardry::PatternRouteRequest::routeAll(KernelPatcher& patcher, const size_t id,

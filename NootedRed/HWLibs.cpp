@@ -738,7 +738,7 @@ void X5000HWLibs::processKext(KernelPatcher& patcher, const size_t id, const mac
                    "HWLibs", "Failed to solve `dmcu_get_dcn21_fw_constants` via call pattern");
     }
 
-    PANIC_COND(!patcher.routeMultiple(id, dmcuFwRequests, slide, size), "HWLibs",
+    PANIC_COND(!patcher.routeMultipleLong(id, dmcuFwRequests, slide, size), "HWLibs",
                "Failed to route DMCU FW-related functions");
 
     PANIC_COND(MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) != KERN_SUCCESS, "HWLibs",

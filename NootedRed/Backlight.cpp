@@ -124,7 +124,7 @@ void Backlight::processKext(KernelPatcher& patcher, const size_t id, const mach_
     else if (kextAppleBacklight.loadIndex == id) {
         KernelPatcher::RouteRequest request{"__ZN15AppleIntelPanel10setDisplayEP9IODisplay", wrapApplePanelSetDisplay,
                                             orgApplePanelSetDisplay};
-        if (patcher.routeMultiple(kextAppleBacklight.loadIndex, &request, 1, slide, size)) {
+        if (patcher.routeMultipleLong(kextAppleBacklight.loadIndex, &request, 1, slide, size)) {
             static const UInt8                       find[]    = "F%uT%04x";
             static const UInt8                       replace[] = "F%uTxxxx";
             const PenguinWizardry::MaskedLookupPatch patch{&kextAppleBacklight, find, replace, 1};
@@ -137,7 +137,7 @@ void Backlight::processKext(KernelPatcher& patcher, const size_t id, const mach_
             {"__ZN25AppleMCCSControlGibraltar5probeEP9IOServicePi", returnZero},
             {"__ZN21AppleMCCSControlCello5probeEP9IOServicePi", returnZero},
         };
-        patcher.routeMultiple(id, requests, slide, size);
+        patcher.routeMultipleLong(id, requests, slide, size);
         patcher.clearError();
     }
 }

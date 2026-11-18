@@ -242,7 +242,7 @@ namespace
             {"__ZN30AMDRadeonX6000_AMDVCN2HWEngine12initHardwareE21eAMDAccelVideoChannel", initHardware,
              initHardwareOriginal},
         };
-        if (!patcher.routeMultiple(id, routes, arrsize(routes), slide, size)) {
+        if (!patcher.routeMultipleLong(id, routes, arrsize(routes), slide, size)) {
             patcher.clearError();
             if (MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) == KERN_SUCCESS) {
                 for (size_t i = 0; i < patchCount; ++i) {
@@ -323,7 +323,7 @@ void VCN::processKext(KernelPatcher& patcher, size_t id, mach_vm_address_t slide
             {"__ZN31AMDRadeonX5000_IAMDSMLInterface18createSMLInterfaceEj", createSML, sml5000},
         };
         if (ok) {
-            ok = patcher.routeMultiple(id, routes, arrsize(routes), slide, size);
+            ok = patcher.routeMultipleLong(id, routes, arrsize(routes), slide, size);
             patcher.clearError();
         }
         has5000 = ok;
