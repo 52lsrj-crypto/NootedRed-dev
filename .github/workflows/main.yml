@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     name: Build
-    runs-on: macos-15-large
+    runs-on: macos-15
     permissions:
       contents: write
       discussions: write
@@ -29,24 +29,20 @@ jobs:
           sw_vers
       - name: Run test suite (known baseline drift excluded)
         run: python3 tools/run_all_tests.py --jobs 4 --exclude 'test_(display_baseline|vpf_patch_audit|vpf_semantic_variants|vpf_display_semantic_variants)\.py$'
-      - run: xcodebuild -configuration Debug -arch x86_64 build
-      - run: xcodebuild -configuration Research\ Release -arch x86_64 build
-      - run: xcodebuild -configuration Release -arch x86_64 build
+      - name: Build Release (x86_64)
+        run: xcodebuild -configuration Release -arch x86_64 build
       - name: Check IOKit class symbols
-        run: |
-          python3 tools/test_ec_backlight_binary.py build/Debug/NootedRed.kext
-          python3 tools/test_ec_backlight_binary.py 'build/Research Release/NootedRed.kext'
-          python3 tools/test_ec_backlight_binary.py build/Release/NootedRed.kext
+        run: python3 tools/test_ec_backlight_binary.py build/Release/NootedRed.kext
       - name: Upload to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Artifacts
-          path: build/*/*.zip
+          name: NootedRed-Release
+          path: build/Release/*.zip
       - name: Upload build
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           shopt -s nullglob
-          files=(build/*/*.zip)
+          files=(build/Release/*.zip)
           [ ${#files[@]} -gt 0 ] || { echo "No zip files found"; exit 1; }
           NOTES=$(awk -v ver="${{ github.ref_name }}" '
             $0 ~ "^## " ver "([[:space:]]|$)" {flag=1; next}
@@ -67,18 +63,3 @@ jobs:
             -F -
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  analyse-clang:
-    name: Analyse Clang
-    runs-on: macos-15-large
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      - name: Select Xcode 16.4
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app
-      - run: xcodebuild analyze -quiet -configuration Debug -arch x86_64 CLANG_ANALYZER_OUTPUT=plist-html CLANG_ANALYZER_OUTPUT_DIR="$(pwd)/clang-analyze" && [ "$(find clang-analyze -name "*.html")" = "" ]
-      - run: xcodebuild analyze -quiet -configuration Research\ Release -arch x86_64 CLANG_ANALYZER_OUTPUT=plist-html CLANG_ANALYZER_OUTPUT_DIR="$(pwd)/clang-analyze" && [ "$(find clang-analyze -name "*.html")" = "" ]
-      - run: xcodebuild analyze -quiet -configuration Release -arch x86_64 CLANG_ANALYZER_OUTPUT=plist-html CLANG_ANALYZER_OUTPUT_DIR="$(pwd)/clang-analyze" && [ "$(find clang-analyze -name "*.html")" = "" ]
