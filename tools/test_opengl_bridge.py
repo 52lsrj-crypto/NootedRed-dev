@@ -41,7 +41,7 @@ using vfs_context_t=void*;
 using thread_call_func_t=void(*)(void*,void*);
 constexpr int KERN_SUCCESS=0;
 static bool flag=true,allocateOK=true,pending=false,locked=false,inHook=false;
-static unsigned major=25,pci=0x1638,allocated=0,freed=0,writeAccess=0,queued=0,validCalls=0;
+static unsigned hostMajor=25,pci=0x1638,allocated=0,freed=0,writeAccess=0,queued=0,validCalls=0;
 static int validValue=1,taintValue=0,nxValue=0,rangeResult=1;
 static std::set<unsigned> failedWrites;
 static std::function<void()> onEnable;
@@ -49,10 +49,10 @@ static std::map<std::string,unsigned> properties;
 static thread_call_func_t callback=nullptr;
 struct NRed{static NRed& singleton(){static NRed n;return n;}unsigned getDeviceID(){return pci;}
  void setProp32(const char* name,unsigned value){assert(!inHook&&!locked);properties[name]=value;}};
-struct Version{unsigned major(){return ::major;}};static Version currentKernelVersion(){return {};}
+struct Version{unsigned major(){return ::hostMajor;}};static Version currentKernelVersion(){return {};}
 static bool checkKernelArgument(const char* name){assert(strcmp(name,"-NRedDisplayFix")==0);return flag;}
 namespace UserPatchCoordinator {
-static UInt32 requestedDisplayGroups(){return VPF::requestedGroupsForDisplayFix(checkKernelArgument("-NRedDisplayFix"),major);}
+static UInt32 requestedDisplayGroups(){return VPF::requestedGroupsForDisplayFix(checkKernelArgument("-NRedDisplayFix"),hostMajor);}
 }
 static thread_call_t thread_call_allocate(thread_call_func_t cb,void*){allocated++;callback=cb;return allocateOK?reinterpret_cast<void*>(1):nullptr;}
 constexpr unsigned THREAD_CALL_PRIORITY_KERNEL=1;
@@ -83,7 +83,7 @@ static const void* verifyExpected=nullptr;static bool allocateBufferOK=true;stat
 [[maybe_unused]] static void kern_os_free(void* p){assert(p&&buffers);buffers--;free(p);}
 static int stockVerify(vnode_t vp,off_t off,const void* data,size_t size,size_t* block,void** context,UInt32 flags,vfs_context_t ctx,void* kind){
  assert(vp==reinterpret_cast<void*>(1)&&off==verifyOffset&&flags==verifyFlags);
- assert(block&&context&&ctx==reinterpret_cast<void*>(0x3333)&&kind==(major==25?reinterpret_cast<void*>(0x4444):nullptr));
+ assert(block&&context&&ctx==reinterpret_cast<void*>(0x3333)&&kind==(hostMajor==25?reinterpret_cast<void*>(0x4444):nullptr));
  *block=131072;*context=reinterpret_cast<void*>(0x5555);verifyCalls++;return !data||!verifyExpected||memcmp(data,verifyExpected,size)==0?0:94;
 }
 // 内联 VNOP_VERIFY 直接分派到文件系统操作，不经过导出的包装函数。
@@ -93,16 +93,16 @@ struct FilesystemArgs {
 };
 using FilesystemVerifier=int(*)(void*);
 static int stockFilesystem(void* raw){
- FilesystemArgs a{};memcpy(&a,raw,major==25?80:72);assert(a.descriptor==reinterpret_cast<void*>(0x2222));
+ FilesystemArgs a{};memcpy(&a,raw,hostMajor==25?80:72);assert(a.descriptor==reinterpret_cast<void*>(0x2222));
  return stockVerify(a.vnode,a.offset,a.data,a.size,a.block,a.context,a.flags,a.ctx,a.kind);
 }
 static FilesystemVerifier filesystemVerify=stockFilesystem;
 static int verifyInlined(void* data,size_t size,off_t offset,UInt32 flags=0){
  size_t block=0;void* context=nullptr;verifyOffset=offset;verifyFlags=flags;
  FilesystemArgs a{reinterpret_cast<void*>(0x2222),reinterpret_cast<void*>(1),offset,data,size,&block,&context,flags,
-                  reinterpret_cast<void*>(0x3333),major==25?reinterpret_cast<void*>(0x4444):nullptr};
+                  reinterpret_cast<void*>(0x3333),hostMajor==25?reinterpret_cast<void*>(0x4444):nullptr};
  // 精确分配旧版 72 字节参数，ASan 会捕获对 Darwin 25 尾字段的越界读取。
- std::vector<uint8_t> raw(major==25?80:72);memcpy(raw.data(),&a,raw.size());auto before=raw;
+ std::vector<uint8_t> raw(hostMajor==25?80:72);memcpy(raw.data(),&a,raw.size());auto before=raw;
  auto result=filesystemVerify(raw.data());
  assert(raw==before&&buffers==0&&block==131072&&context==reinterpret_cast<void*>(0x5555));return result;
 }
@@ -155,7 +155,7 @@ static void reset(unsigned os=25,unsigned id=0x1638){
  Actual::appliedMask=Actual::dynamicMask=Actual::errorMask=Actual::planMask=Actual::evidenceMask=0;
  Actual::groupStates[0]=Actual::groupStates[1]=0;Actual::originalVerify=0;Actual::verifyMask=0;registrations=0;
  properties.clear();failedWrites.clear();onEnable=nullptr;pending=locked=inHook=false;
- flag=allocateOK=true;major=os;pci=id;allocated=freed=writeAccess=queued=validCalls=0;
+ flag=allocateOK=true;hostMajor=os;pci=id;allocated=freed=writeAccess=queued=validCalls=0;
  validValue=rangeResult=1;taintValue=nxValue=0;vnodeName="AMDRadeonX5000GLDriver";names=putnames=0;
  expectedVnode=reinterpret_cast<void*>(0x1234567812340000ULL);expectedOffset=0xe000;
  filesystemVerify=stockFilesystem;verifyExpected=nullptr;allocateBufferOK=true;buffers=verifyCalls=0;

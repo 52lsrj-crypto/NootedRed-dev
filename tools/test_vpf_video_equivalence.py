@@ -34,7 +34,7 @@ class EquivalenceTests(unittest.TestCase):
     def setUpClass(cls):
         WORK.mkdir(parents=True, exist_ok=True)
         old = WORK / 'legacy-headers'
-        old.mkdir(exist_ok=True)
+        old.mkdir(parents=True, exist_ok=True)
         for name in ('UserVideoDecodeResolver.hpp',):
             try:
                 content = subprocess.check_output(

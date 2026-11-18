@@ -27,8 +27,8 @@ def main():
 #include <vector>
 #include <VCNKernelProfiles.hpp>
 using mach_vm_address_t=uintptr_t;using SInt32=int32_t;
-static unsigned major=25,transitions=0;static bool writable=false,denyWrite=false;
-struct Version {unsigned major()const{return ::major;}};static Version currentKernelVersion(){return {};}
+static unsigned hostMajor=25,transitions=0;static bool writable=false,denyWrite=false;
+struct Version {unsigned major()const{return ::hostMajor;}};static Version currentKernelVersion(){return {};}
 #define SYSLOG(...) ((void)0)
 constexpr int KERN_SUCCESS=0;
 template<typename T,size_t N>constexpr size_t arrsize(const T(&)[N]){return N;}
@@ -48,7 +48,7 @@ static uintptr_t signalOriginal=0,clientStart6000=0,clientStop6000=0,initHardwar
 CODE
 int main(){
  for(unsigned host:{23U,24U,25U}){
-  major=host;size_t count=0;const auto* patches=VCNKernelProfiles::patches(host,count);assert(patches&&count&&count<=32);
+  hostMajor=host;size_t count=0;const auto* patches=VCNKernelProfiles::patches(host,count);assert(patches&&count&&count<=32);
   std::vector<uint8_t> memory(128*1024);const uintptr_t base=reinterpret_cast<uintptr_t>(memory.data());
   KernelPatcher kernel;
   const auto reset=[&]{

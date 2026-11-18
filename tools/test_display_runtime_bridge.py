@@ -105,7 +105,7 @@ def main():
     (stubs / 'IOKit/IOTypes.h').write_text(
         '#pragma once\n#include <cstdint>\n'
         'using UInt8=uint8_t;using UInt16=uint16_t;using UInt32=uint32_t;using UInt64=uint64_t;\n')
-    (stubs / 'Headers').mkdir(exist_ok=True)
+    (stubs / 'Headers').mkdir(parents=True, exist_ok=True)
     (stubs / 'Headers/kern_util.hpp').write_text('#pragma once\n#include <IOKit/IOTypes.h>\n')
     source = (ROOT / 'NootedRed/UserSurfaceSync.cpp').read_text()
     body = re.split(r'namespace\s*\{', source, maxsplit=1)[1]

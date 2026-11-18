@@ -128,7 +128,7 @@ class DisplayManifestTests(unittest.TestCase):
             work = Path(directory)
             stub_root = work / 'stubs'
             stub = stub_root / 'IOKit'
-            stub.mkdir(parents=True)
+            stub.mkdir(parents=True, exist_ok=True)
             (stub / 'IOTypes.h').write_text(
                 '#pragma once\n#include <cstdint>\n'
                 'using UInt8=uint8_t;using UInt16=uint16_t;using UInt32=uint32_t;using UInt64=uint64_t;\n'

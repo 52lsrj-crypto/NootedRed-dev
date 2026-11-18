@@ -48,3 +48,6 @@ clang_analyze/
 # Python 测试产生的字节码缓存
 __pycache__/
 *.py[cod]
+
+# Clang Static Analyzer 本地产物（根目录散落的 plist）
+/*.plist

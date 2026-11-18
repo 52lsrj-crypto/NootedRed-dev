@@ -40,6 +40,7 @@ ENV_ERRORS = [
     (re.compile(r"未核实，拒绝生成"), "需要本机 macOS 共享缓存数据"),
     (re.compile(r"请先构建"), "需要先构建对应 Xcode 配置"),
     (re.compile(r"/System/Volumes/|KernelCollection 中均未找到|AMDRadeonX"), "需要 macOS 系统缓存或驱动"),
+    (re.compile(r"SKIP: 本机 Darwin"), "本机 Darwin 版本不受实时缓存测试支持"),
     (re.compile(r"FileNotFoundError.*(build/|/System/)"), "需要先生成构建数据"),
     (re.compile(r"the following arguments are required"), "需要外部输入参数"),
     (re.compile(r"'as', '-arch'"), "需要 Xcode 汇编器"),

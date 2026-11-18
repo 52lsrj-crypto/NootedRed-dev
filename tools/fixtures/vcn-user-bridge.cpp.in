@@ -21,13 +21,53 @@
 #include "VCNCapabilities.hpp"
 namespace UserPatchCoordinator
 {
-    using PatchCallback = int (*)(void*, void*, int);
+    constexpr UInt32 HeaderSize = 104;
+    enum class Outcome : UInt8 { Pending, Idle, Patched };
+    struct Participant
+    {
+        Outcome outcome{Outcome::Pending};
+        void*   proof{nullptr};
+    };
+    struct Transaction
+    {
+        UInt64      base{0};
+        UInt8       header[HeaderSize]{};
+        bool        cacheRead{false};
+        Participant display{}, video{};
+        bool sharedHeader(UInt64& outBase, UInt8* outHeader) const
+        {
+            if (!cacheRead) { return false; }
+            outBase = base;
+            memcpy(outHeader, header, HeaderSize);
+            return true;
+        }
+    };
+    using Reader           = int (*)(unsigned long long, void*, unsigned long);
+    using PatchCallback    = int (*)(void*, void*, int, Transaction&);
+    using ProcessPredicate = bool (*)(void*);
+
     inline bool deferModulePatches() { return false; }
     inline void clearDisplay() {}
     inline void clearVideo() {}
     inline void registerDisplay(const PatchCallback) {}
     inline void registerVideo(const PatchCallback) {}
+    inline void registerReader(const Reader) {}
+    inline void forgetMap(void*) {}
+    inline bool processAllowed(void*) { return true; }
+    template<typename Plan>
+    inline void settlePatched(Participant&, const Plan&) {}
 }    // namespace UserPatchCoordinator
+namespace UserRejectedCaches
+{
+    struct Table
+    {
+        bool init() { return true; }
+        bool shouldSkip(const UInt8*) { return false; }
+        template<typename Input>
+        void rejectMissingImages(const UInt8*, const Input&) {}
+        void accept(const UInt8*) {}
+    };
+}    // namespace UserRejectedCaches
 using user_addr_t=uint64_t;using mach_vm_address_t=uint64_t;using mach_vm_size_t=uint64_t;
 using vm_map_t=void*;using task_t=void*;using proc_t=void*;using natural_t=unsigned;
 using mach_msg_type_number_t=unsigned;using vm_prot_t=int;using kern_return_t=int;
@@ -45,7 +85,8 @@ struct NRed {static NRed& singleton(){static NRed n;return n;}void setProp32(con
 struct Version{unsigned major(){return majorValue;}unsigned minor(){return minorValue;}static unsigned majorValue,minorValue;};unsigned Version::majorValue=25;unsigned Version::minorValue=6;
 const PenguinWizardry::KernelVersion& currentKernelVersion(){static std::optional<PenguinWizardry::KernelVersion> current;return current.emplace(Version::majorValue,Version::minorValue);}
 static bool flag=true,fvrcEnabled=true;static bool checkKernelArgument(const char* s){
- assert(strcmp(s,"-NRedVideoFix")==0||strcmp(s,"-NRedNoFVRC")==0);
+ assert(strcmp(s,"-NRedVideoFix")==0||strcmp(s,"-NRedNoFVRC")==0||strcmp(s,"-NRedRejectTrace")==0);
+ if(strcmp(s,"-NRedRejectTrace")==0)return false;
  if(strcmp(s,"-NRedNoFVRC")==0)return !fvrcEnabled;
  return flag;}
 namespace VCN { static bool active=true; bool allocated(){return active;} }

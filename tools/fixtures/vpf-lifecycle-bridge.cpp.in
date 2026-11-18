@@ -37,11 +37,12 @@ static void publish(UInt64&, const char* key, UInt32 value) { NRed::singleton().
 LEDGER
 
 using MapDestroy = void (*)(vm_map_t);
+namespace UserPatchCoordinator { void forgetMap(void*); }
 static MapDestroy originalMapDestroy = nullptr;
 MAP_DESTROY
 MAP_TARGET
 
-static bool sequoia = false;
+[[maybe_unused]] static bool sequoia = false;
 static const int* devicePatches = nullptr;
 namespace UserVideoDecodeData { static const int* findDevice(UInt32) { static int value; return &value; } }
 namespace UserSequoiaVideoData { static const int* findDevice(UInt32 id) { return UserVideoDecodeData::findDevice(id); } }
@@ -68,12 +69,38 @@ static void wrappedSharedRegionCheck() { }
 #define SYSLOG(...) ((void)0)
 namespace UserPatchCoordinator
 {
-    using PatchCallback = int (*)(void*, void*, int);
+    constexpr UInt32 HeaderSize = 104;
+    enum class Outcome : UInt8 { Pending, Idle, Patched };
+    struct Participant
+    {
+        Outcome outcome{Outcome::Pending};
+        void*   proof{nullptr};
+    };
+    struct Transaction
+    {
+        UInt64      base{0};
+        UInt8       header[HeaderSize]{};
+        bool        cacheRead{false};
+        Participant display{}, video{};
+    };
+    using Reader        = int (*)(unsigned long long, void*, unsigned long);
+    using PatchCallback = int (*)(void*, void*, int, Transaction&);
+
     inline void clearVideo() {}
     inline void registerVideo(const PatchCallback) {}
+    inline void forgetMap(void*) {}
+    inline bool processAllowed(void*) { return true; }
+    inline bool deferModulePatches() { return false; }
+    template<typename Plan>
+    inline void settlePatched(Participant&, const Plan&) {}
 }
+namespace UserSonomaVideoData { static const int* findDevice(UInt32 id) { return UserVideoDecodeData::findDevice(id); } }
+namespace UserRejectedCaches { struct Table { bool init() { return true; } }; }
+static UserRejectedCaches::Table rejectedCaches;
+static bool rejectTrace = false;
+static UInt32 darwinMajor = 25;
 struct SharedRegionCheckArgs { UInt64 startAddress; };
-static int patchSharedRegion(proc_t, SharedRegionCheckArgs*, int result) { return result; }
+static int patchSharedRegion(proc_t, SharedRegionCheckArgs*, int result, UserPatchCoordinator::Transaction*) { return result; }
 
 static std::array<UInt8, 64> destroyEntry{};
 static unsigned destroyCalls = 0;

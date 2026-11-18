@@ -1,5 +1,6 @@
 """只读真实共享缓存，验证显示、视频和提交守卫计划，不创建 Metal 设备。"""
 import argparse
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -13,7 +14,8 @@ WORK = ROOT / 'build/cache-section-targets/live'
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cache', type=Path, default=Path('/System/Volumes/Preboot/Cryptexes/OS/System/Library/dyld'))
-    parser.add_argument('--major',type=int,choices=[24,25],default=25)
+    parser.add_argument('--major',type=int,choices=[23,24,25],default=None,
+                        help='目标 Darwin 主版本；默认按本机系统自动检测')
     parser.add_argument('--repeat', type=int, default=1, choices=range(1, 21))
     parser.add_argument('--label', default='result')
     parser.add_argument('--kernel-memchr', action='store_true')
@@ -21,6 +23,14 @@ def main():
     parser.add_argument('--kernel-codegen', action='store_true', help='禁用 SIMD 编译，使用整数微秒报告 CPU 耗时')
     parser.add_argument('--baseline-ref', help='从指定本地提交读取解析器源码，供相同缓存的 CPU 对照测量')
     args = parser.parse_args()
+    major = args.major
+    if major is None:
+        try:
+            major = int(os.uname().release.split('.', 1)[0])
+        except (ValueError, AttributeError):
+            major = -1
+        if major not in (23, 24, 25):
+            raise SystemExit(f'SKIP: 本机 Darwin {major} 不受实时缓存测试支持（仅 23/24/25）')
     WORK.mkdir(parents=True, exist_ok=True)
     with (args.cache / 'dyld_shared_cache_x86_64h').open('rb') as handle:
         handle.seek(88)
@@ -86,6 +96,17 @@ template<class Plan>static void originals(const Plan& plan,unsigned count){
 int main(){
  auto base=UserSurfaceSyncData::CacheBase;
  for(unsigned repeat=0;repeat<REPEAT;repeat++){
+ if(MAJOR==23)for(auto&device:UserSonomaSurfaceData::DevicePatches){
+  calls=0;bytesRead=0;auto start=clock();
+  UserSurfaceSyncResolver::Plan plan;auto& input=plan.input;
+  input.reader=reader;input.scanBuffer=plan.scan;
+  input.selectImages(base,UserSonomaSurfaceData::ResolverImages,
+                     sizeof(UserSonomaSurfaceData::ResolverImages)/sizeof(UserSonomaSurfaceData::ResolverImages[0]));
+  assert(UserSurfaceSyncResolver::resolveMetal(input,base,device.deviceID,plan,23));
+  originals(plan,4);
+  printf("PASS real sonoma surface device=%x reads=%u\n",device.deviceID,plan.reads);
+  printf("PERF sonoma surface device=%x calls=%u bytes=%llu cpu_ms=%.3f\n",device.deviceID,calls,bytesRead,1000.0*(clock()-start)/CLOCKS_PER_SEC);
+ }
  if(MAJOR==25)for(auto&device:UserSurfaceSyncData::DevicePatches){
   calls=0;bytesRead=0;auto start=clock();
   UserSurfaceSyncResolver::Plan plan;
@@ -105,6 +126,14 @@ int main(){
   printf("PASS real video device=%x reads=%u bytes=%u\n",device.deviceID,plan.reads,input.bytes);
   printf("PERF video device=%x calls=%u bytes=%llu cpu_ms=%.3f\n",device.deviceID,calls,bytesRead,1000.0*(clock()-start)/CLOCKS_PER_SEC);
  }
+ if(MAJOR==23){
+  calls=0;bytesRead=0;auto start=clock();
+  UserSurfaceSyncResolver::Plan plan;auto& input=plan.input;
+  input.reader=reader;input.scanBuffer=plan.scan;
+  uint64_t offset=0;
+  assert(UserSurfaceSyncResolver::resolveSubmitForOS(input,base,offset,23));
+  printf("PASS real sonoma submit method offset=%llx\n",offset);
+  printf("PERF sonoma submit calls=%u bytes=%llu cpu_ms=%.3f\n",calls,bytesRead,1000.0*(clock()-start)/CLOCKS_PER_SEC);}
  if(MAJOR==25){calls=0;bytesRead=0;auto start=clock();uint64_t offset=0;assert(UserSurfaceSyncResolver::resolveTahoeSubmit(reader,base,offset));
  printf("PASS real full submit method offset=%llx\n",offset);
  printf("PERF submit calls=%u bytes=%llu cpu_ms=%.3f\n",calls,bytesRead,1000.0*(clock()-start)/CLOCKS_PER_SEC);}
@@ -123,7 +152,7 @@ int main(){
  }
  for(auto&m:mappings)if(m.fd>=0)close(m.fd);
 }
-'''.replace('MAPPINGS', ',\n'.join(mappings)).replace('MAJOR',str(args.major)).replace('REPEAT', str(args.repeat)).replace('VIDEO_DATA','UserSequoiaVideoData' if args.major==24 else 'UserVideoDecodeData')
+'''.replace('MAPPINGS', ',\n'.join(mappings)).replace('MAJOR',str(major)).replace('REPEAT', str(args.repeat)).replace('VIDEO_DATA','UserSonomaVideoData' if major==23 else 'UserSequoiaVideoData' if major==24 else 'UserVideoDecodeData')
     if args.memory_reader:
         source = source.replace('#include <ctime>', '#include <ctime>\n#include <sys/mman.h>\n#include <sys/stat.h>')
         source = source.replace('int fd=-1;', 'int fd=-1;void* memory=nullptr;size_t fileSize=0;')
@@ -151,7 +180,7 @@ int main(){
     baseline_flags = ['-DOPTIMIZED=1']
     if args.baseline_ref:
         baseline = WORK / 'baseline'
-        baseline.mkdir(exist_ok=True)
+        baseline.mkdir(parents=True, exist_ok=True)
         for name in ['UserCacheResolver.hpp', 'UserSharedCache.hpp', 'UserSurfaceSyncResolver.hpp',
                      'UserVideoDecodeResolver.hpp']:
             text = subprocess.check_output(['git', 'show', args.baseline_ref + ':NootedRed/' + name],

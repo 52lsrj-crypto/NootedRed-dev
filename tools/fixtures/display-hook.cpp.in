@@ -44,12 +44,49 @@ static void IOLockWakeup(IOLock*,void*,bool){}
 static void* current_thread(){static thread_local char identity;return &identity;}
 #include <UserPatchMapGate.hpp>
 namespace UserPatchCoordinator {
-using PatchCallback=int(*)(void*,void*,int);
+constexpr UInt32 HeaderSize = 104;
+enum class Outcome : UInt8 { Pending, Idle, Patched };
+struct Participant
+{
+    Outcome outcome{Outcome::Pending};
+    void*   proof{nullptr};
+};
+struct Transaction
+{
+    UInt64      base{0};
+    UInt8       header[HeaderSize]{};
+    bool        cacheRead{false};
+    Participant display{}, video{};
+    bool sharedHeader(UInt64& outBase, UInt8* outHeader) const
+    {
+        if (!cacheRead) { return false; }
+        outBase = base;
+        memcpy(outHeader, header, HeaderSize);
+        return true;
+    }
+};
+using Reader           = int (*)(unsigned long long, void*, unsigned long);
+using PatchCallback    = int (*)(void*, void*, int, Transaction&);
+using ProcessPredicate = bool (*)(void*);
 inline bool deferModulePatches(){return false;}
 inline void clearDisplay(){}
 inline void clearVideo(){}
-inline void registerDisplay(PatchCallback){}
-inline void registerVideo(PatchCallback){}
+inline void registerDisplay(const PatchCallback){}
+inline void registerVideo(const PatchCallback){}
+inline void registerReader(const Reader){}
+inline void forgetMap(void*){}
+inline bool processAllowed(void*){return true;}
+template<typename Plan> inline void settlePatched(Participant&, const Plan&){}
+}
+namespace UserRejectedCaches
+{
+    struct Table
+    {
+        bool init(){return true;}
+        bool shouldSkip(const UInt8*){return false;}
+        template<typename Input> void rejectMissingImages(const UInt8*,const Input&){}
+        void accept(const UInt8*){}
+    };
 }
 namespace Buffer {template<class T>T* create(size_t n){return new T[n];}template<class T>void deleter(T* p){delete[] p;}}
 template<typename T,size_t N>constexpr size_t arrsize(const T(&)[N]){return N;}
