@@ -26,6 +26,7 @@
 #include <mach/i386/vm_param.h>
 #include <mach/i386/vm_types.h>
 #include <mach/kern_return.h>
+#include <string.h>
 
 static const UInt8 kChannelTypesPattern[] = {0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
                                              0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00};
@@ -198,8 +199,12 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         {"__ZN27AMDRadeonX5000_AMDHWDisplay14getDisplayInfoEjbbPvP17_FRAMEBUFFER_INFO", fixedGetDisplayInfo},
         {"__ZN33AMDRadeonX5000_AMDHWAlignManager214getSurfaceInfoEP24_AMD_SURFACE_INFO_STRUCT", fixedGetSurfaceInfo},
     };
-    PANIC_COND(!PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, requests, slide, size), "X5000",
-               "Failed to route symbols");
+    const bool routeOk = PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, requests, slide, size);
+    if (!routeOk) {
+        NRed::singleton().setProp32("NRedX5000RouteFailed", 1);
+        SYSLOG("X5000", "Failed to route one or more X5000 symbols; see Patcher+ log");
+    }
+    PANIC_COND(!routeOk, "X5000", "Failed to route symbols");
 
     if (currentKernelVersion() >= MACOS_11 && !computeSubmitHookEnabled()) {
         NRed::singleton().setProp32("NRedKernelComputeHook", 0);
@@ -322,14 +327,21 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
                        "Failed to patch swizzle mode");
         }
 
-        PANIC_COND(MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) != KERN_SUCCESS, "X5000",
-                   "Failed to enable kernel writing");
-        // createAccelChannels: stop at SDMA0
-        orgChannelTypes[5] = 1;
-        // getPagingChannel: get only SDMA0
-        orgChannelTypes[currentKernelVersion() >= MACOS_12 ? 12 : 11] = 0;
-        MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
-        DBGLOG("X5000", "Applied SDMA1 patches");
+        if (memcmp(orgChannelTypes, kChannelTypesPattern, sizeof(kChannelTypesPattern)) != 0) {
+            NRed::singleton().setProp32("NRedChannelTypesPatternMismatch", 1);
+            SYSLOG("X5000", "channelTypes layout mismatch; skipping SDMA1 channel patches");
+        }
+        else {
+            PANIC_COND(MachInfo::setKernelWriting(true, KernelPatcher::kernelWriteLock) != KERN_SUCCESS, "X5000",
+                       "Failed to enable kernel writing");
+            // createAccelChannels: stop at SDMA0
+            orgChannelTypes[5] = 1;
+            // getPagingChannel: get only SDMA0
+            orgChannelTypes[currentKernelVersion() >= MACOS_12 ? 12 : 11] = 0;
+            MachInfo::setKernelWriting(false, KernelPatcher::kernelWriteLock);
+            NRed::singleton().setProp32("NRedChannelTypesPatched", 1);
+            DBGLOG("X5000", "Applied SDMA1 patches");
+        }
     }
 }
 
@@ -342,7 +354,10 @@ bool X5000::allocateHWEngines(void* const self)
     auto* const pm4 = singleton().pm4EngineMC->alloc();
     if (!pm4) {
         NRed::singleton().setProp32("NRedHWEngineAllocFailed", 1);
-        if (!legacy) { return false; }
+        if (!legacy) {
+            SYSLOG("X5000", "PM4 engine allocation failed; aborting accelerator init");
+            return false;
+        }
         singleton().pm4EngineField(self)   = nullptr;
         singleton().sdma0EngineField(self) = nullptr;
         SYSLOG("X5000", "PM4 engine allocation failed; continuing with legacy layout");
@@ -353,7 +368,10 @@ bool X5000::allocateHWEngines(void* const self)
     if (!sdma0) {
         pm4->release();
         NRed::singleton().setProp32("NRedHWEngineAllocFailed", 2);
-        if (!legacy) { return false; }
+        if (!legacy) {
+            SYSLOG("X5000", "SDMA0 engine allocation failed; aborting accelerator init");
+            return false;
+        }
         singleton().pm4EngineField(self)   = nullptr;
         singleton().sdma0EngineField(self) = nullptr;
         SYSLOG("X5000", "SDMA0 engine allocation failed; continuing with legacy layout");
@@ -398,6 +416,12 @@ void X5000::wrapSetupAndInitializeHWCapabilities(void* const self)
     singleton().hasSDMAPagingQueueField(self)    = false;
     singleton().hasGetAllClockLimitsField(self)  = false;
     if (currentKernelVersion() >= MACOS_10_15) { singleton().dccDisplayableSupportField(self) = true; }
+
+    NRed::singleton().setProp32("NRedHwMaxCUs", hwMaxCUs);
+    SYSLOG("X5000", "HW capabilities: seCount=%u shCount=%u hwMaxCUs=%u", seCount, shCount, hwMaxCUs);
+    if (NRed::singleton().getAttributes().isRenoir() && hwMaxCUs == 8) {
+        SYSLOG("X5000", "Renoir CU guard: assuming 8 CUs; 6CU SKUs may require a device-specific value");
+    }
 }
 
 // TODO: Investigate why this is needed.

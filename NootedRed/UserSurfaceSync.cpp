@@ -738,6 +738,8 @@ void UserSurfaceSync::init(KernelPatcher& patcher)
 {
     UserPatchCoordinator::clearDisplay();
     VPF::ResolutionDiagnostics::setEnabled(!checkKernelArgument("-NRedNoFVRC"));
+    SYSLOG("UserSurfaceSync", "init: displayGroups=0x%X FVRC=%u", UserPatchCoordinator::requestedDisplayGroups(),
+           VPF::ResolutionDiagnostics::enabled() ? 1 : 0);
     rejectTrace = checkKernelArgument("-NRedRejectTrace");
     NRed::singleton().setProp32("NRedRejectedCacheTable", rejectedCaches.init() ? 1 : 0);
     NRed::singleton().setProp32("NRedFVRCEnabled", VPF::ResolutionDiagnostics::enabled() ? 1 : 0);

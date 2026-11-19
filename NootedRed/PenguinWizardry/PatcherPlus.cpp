@@ -156,8 +156,14 @@ bool PenguinWizardry::PatternRouteRequest::route(KernelPatcher& patcher, const s
 
     // Workaround as patcher internals will attempt to resolve
     // the symbol without checking if the `from` field is 0.
-    this->symbol = nullptr;
-    return patcher.routeMultipleLong(id, this, 1, start, size);
+    const auto* const symbol = this->symbol;
+    this->symbol             = nullptr;
+    if (!patcher.routeMultipleLong(id, this, 1, start, size)) {
+        SYSLOG("Patcher+", "Failed to route `%s` (error %d)", safeString(symbol),
+               static_cast<int>(patcher.getError()));
+        return false;
+    }
+    return true;
 }
 
 bool PenguinWizardry::PatternRouteRequest::routeAll(KernelPatcher& patcher, const size_t id,
@@ -167,7 +173,7 @@ bool PenguinWizardry::PatternRouteRequest::routeAll(KernelPatcher& patcher, cons
     for (size_t i = 0; i < count; i++) {
         if (requests[i].route(patcher, id, start, size)) { DBGLOG("Patcher+", "Applied pattern route (i: %zu)", i); }
         else {
-            DBGLOG("Patcher+", "Failed to apply pattern route (i: %zu)", i);
+            SYSLOG("Patcher+", "Failed to apply pattern route (i: %zu)", i);
             return false;
         }
     }
@@ -294,7 +300,7 @@ bool PenguinWizardry::JumpPatternRouteRequest::route(KernelPatcher& patcher, con
     }
 
     const auto hasOrg  = this->org != nullptr;
-    auto       wrapper = patcher.routeFunction(this->from, this->to, hasOrg);
+    auto       wrapper = patcher.routeFunctionLong(this->from, this->to, hasOrg);
     if (hasOrg) {
         if (wrapper == 0) { return false; }
         *this->org = wrapper;
@@ -314,7 +320,7 @@ bool PenguinWizardry::JumpPatternRouteRequest::routeAll(KernelPatcher& patcher, 
             DBGLOG("Patcher+", "Applied jump pattern route (i: %zu)", i);
         }
         else {
-            DBGLOG("Patcher+", "Failed to apply jump pattern route (i: %zu)", i);
+            SYSLOG("Patcher+", "Failed to apply jump pattern route (i: %zu)", i);
             return false;
         }
     }

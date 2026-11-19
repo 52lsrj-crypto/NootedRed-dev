@@ -110,9 +110,21 @@ void NRed::hwLateInit()
     PANIC_COND(this->rmmio == nullptr || this->rmmio->getLength() == 0, "NRed", "Failed to map RMMIO");
     this->rmmioPtr = reinterpret_cast<volatile UInt32*>(this->rmmio->getVirtualAddress());
 
-    this->fbOffset    = static_cast<UInt64>(this->readReg32(GC_BASE_0 + MC_VM_FB_OFFSET) & 0xFFFFFF) << 24;
-    this->devRevision = (this->readReg32(NBIO_BASE_2 + RCC_DEV0_EPF0_STRAP0) & RCC_DEV0_EPF0_STRAP0_ATI_REV_ID_MASK)
-                        >> RCC_DEV0_EPF0_STRAP0_ATI_REV_ID_SHIFT;
+    const auto fbOffsetReg = this->readReg32(GC_BASE_0 + MC_VM_FB_OFFSET);
+    const auto strap0Reg   = this->readReg32(NBIO_BASE_2 + RCC_DEV0_EPF0_STRAP0);
+    if (fbOffsetReg == 0xFFFFFFFF || strap0Reg == 0xFFFFFFFF) {
+        this->setProp32("NRedHwLateInitReadFailed", 1);
+        SYSLOG("NRed", "hwLateInit: MMIO read failed (fbOffset=0x%X strap0=0x%X)", fbOffsetReg, strap0Reg);
+    }
+    if (fbOffsetReg != 0xFFFFFFFF) {
+        this->fbOffset = static_cast<UInt64>(fbOffsetReg & 0xFFFFFF) << 24;
+    }
+    if (strap0Reg != 0xFFFFFFFF) {
+        this->devRevision =
+            (strap0Reg & RCC_DEV0_EPF0_STRAP0_ATI_REV_ID_MASK) >> RCC_DEV0_EPF0_STRAP0_ATI_REV_ID_SHIFT;
+    }
+    SYSLOG("NRed", "hwLateInit: fbOffset=0x%llX devRevision=0x%X pciRevision=0x%X", this->fbOffset,
+           this->devRevision, this->pciRevision);
 
     if (this->attributes.isRenoir()) {
         if (!this->attributes.isGreenSardine() && this->devRevision == 0 && this->pciRevision >= 0x80
