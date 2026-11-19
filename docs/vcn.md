@@ -6,6 +6,8 @@
 当前开放 PCI `1002:15E7 / 1636 / 1638 / 164C` 的 VCN 2.2 路径；
 `1002:15D8 / 15DD` 保留分类但不接入 VCN1。能力表必须与 NRed 原有设备分类一致，
 生成器发现重复、遗漏或未经核实的 VA 分类时拒绝生成。
+Raven/Picasso 的 X5000 personality 也不再声明 `IODVDBundleName`、`IOGVACodec`
+或 HEVC 能力；在 VCN1 桥接实现前，系统应回退到软件解码，避免 VideoToolbox 误判硬解。
 
 | PCI ID | NRed 家族 | 视频代际 | 本次接入 |
 | --- | --- | --- | --- |
