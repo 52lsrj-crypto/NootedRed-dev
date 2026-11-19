@@ -196,9 +196,9 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         {"__ZN30AMDRadeonX5000_AMDGFX9Hardware20writeASICHangLogInfoEPPv", returnZero},
         {"__ZN4Addr2V27Gfx9Lib20HwlConvertChipFamilyEjj", wrapHwlConvertChipFamily, this->orgHwlConvertChipFamily,
          kHwlConvertChipFamilyPattern},
+        {"__ZN27AMDRadeonX5000_AMDHWDisplay14getDisplayInfoEjbbPvP17_FRAMEBUFFER_INFO", fixedGetDisplayInfo},
     };
     PenguinWizardry::PatternRouteRequest surfaceRequests[] = {
-        {"__ZN27AMDRadeonX5000_AMDHWDisplay14getDisplayInfoEjbbPvP17_FRAMEBUFFER_INFO", fixedGetDisplayInfo},
         {"__ZN33AMDRadeonX5000_AMDHWAlignManager214getSurfaceInfoEP24_AMD_SURFACE_INFO_STRUCT", fixedGetSurfaceInfo},
     };
     const bool routeOk = PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, requests, slide, size);
@@ -211,11 +211,11 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
     if (checkKernelArgument("-NRedSurfaceOverride")) {
         NRed::singleton().setProp32("NRedSurfaceOverride", 1);
         PANIC_COND(!PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, surfaceRequests, slide, size), "X5000",
-                   "Failed to route surface/display overrides");
+                   "Failed to route surface info override");
     }
     else {
         NRed::singleton().setProp32("NRedSurfaceOverride", 0);
-        SYSLOG("X5000", "Surface/display overrides disabled; enable with -NRedSurfaceOverride");
+        SYSLOG("X5000", "Surface info override disabled; display info remains; enable with -NRedSurfaceOverride");
     }
 
     if (currentKernelVersion() >= MACOS_11 && !computeSubmitHookEnabled()) {

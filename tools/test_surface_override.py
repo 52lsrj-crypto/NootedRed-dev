@@ -1,4 +1,4 @@
-"""校验 surface/display 覆盖默认关闭，仅 -NRedSurfaceOverride 启用。"""
+"""校验 getSurfaceInfo 覆盖默认关闭，getDisplayInfo 保留，仅 -NRedSurfaceOverride 启用 surface。"""
 from pathlib import Path
 import re
 import sys
@@ -14,12 +14,12 @@ def main():
 
     main_requests = re.search(r'PatternRouteRequest requests\[\] = \{(.*?)\n    \};', SOURCE, re.S)
     assert main_requests, '未找到默认 requests 数组'
-    assert 'getDisplayInfo' not in main_requests.group(1), '默认仍安装 getDisplayInfo'
+    assert 'getDisplayInfo' in main_requests.group(1), '默认应保留 getDisplayInfo'
     assert 'getSurfaceInfo' not in main_requests.group(1), '默认仍安装 getSurfaceInfo'
 
     surface_requests = re.search(r'PatternRouteRequest surfaceRequests\[\] = \{(.*?)\n    \};', SOURCE, re.S)
     assert surface_requests, '未找到 surfaceRequests 数组'
-    assert 'getDisplayInfo' in surface_requests.group(1), 'surfaceRequests 缺少 getDisplayInfo'
+    assert 'getDisplayInfo' not in surface_requests.group(1), 'surfaceRequests 不应包含 getDisplayInfo'
     assert 'getSurfaceInfo' in surface_requests.group(1), 'surfaceRequests 缺少 getSurfaceInfo'
 
     gate = SOURCE[SOURCE.index('if (checkKernelArgument("-NRedSurfaceOverride"))'):]
@@ -30,7 +30,7 @@ def main():
     assert 'ADDR2_COMPUTE_SURFACE_INFO_OUTPUT surfInfoOutput{};' in SOURCE, '显示输出未清零'
     assert 'self->surfInfoOutputs()[fbIndex] = {};' in SOURCE, 'surface 输出未在调用前清零'
 
-    print('PASS surface/display overrides default-off; gated by -NRedSurfaceOverride; '
+    print('PASS getDisplayInfo kept; getSurfaceInfo default-off and gated by -NRedSurfaceOverride; '
           'inputs/outputs zero-initialized')
 
 

@@ -15,9 +15,9 @@
 | `-NRedNoComputeSubmit` | 不安装 X5000 compute 提交虚表 Hook（同时跳过 `notifyGfxAccess`） | Renoir 默认不安装 |
 | `-NRedComputeSubmit` | 在 Renoir 上强制安装 compute 提交 Hook | 关闭 |
 | `-NRedLegacyEngineAlloc` | PM4／SDMA0 引擎分配失败时仍继续初始化，用于救援启动卡死（空引擎槽可能导致后续 panic） | 关闭 |
-| `-NRedSurfaceOverride` | 安装 0.9.0 的 `getDisplayInfo`／`getSurfaceInfo` 覆盖；默认关闭以恢复 0.8.10 surface 行为 | 关闭 |
+| `-NRedSurfaceOverride` | 安装 0.9.0 的 `getSurfaceInfo` 覆盖；`getDisplayInfo` 默认保留 | 关闭 |
 
-`-NRedSurfaceOverride` 用于对照 0.9.0 新增的 surface/display 覆盖。默认关闭后，WindowServer 新建弹层/窗口 surface 时使用 0.8.10 的原生路径；如果 issue #2 的 GFX Reset 消失，可确认问题来自这两个覆盖，再逐项恢复并修复 `format`/`outWidth`。
+`-NRedSurfaceOverride` 只控制 `getSurfaceInfo`。`getDisplayInfo` 默认保留，避免登录阶段/显示初始化失去 0.9.0 路径；`getSurfaceInfo` 默认关闭后，WindowServer 新建弹层/视频帧 surface 时使用 0.8.10 的原生路径。如果 issue #2 的 GFX Reset 消失，可确认问题来自该覆盖，再逐项修复 `format`/`outWidth`。
 
 Renoir（`0x15E7 / 0x1636 / 0x1638 / 0x164C`）默认跳过 compute 提交 Hook。该 Hook 每次 compute 提交都会调用
 `AMDGFX9Hardware::notifyGfxAccess`，而 4800U 上出现过 `computeUQ` 通道超时与 WindowServer watchdog。
