@@ -34,6 +34,7 @@ class X5000
     ObjectField<mach_vm_address_t> hwChannelSubmitCommandBuffer;
     OSMetaClass*                   pm4EngineMC{nullptr};
     OSMetaClass*                   sdmaEngineMC{nullptr};
+    mach_vm_address_t              orgSetupAndInitializeHWCapabilities{0};
     mach_vm_address_t              orgGFX9SetupAndInitializeHWCapabilities{0};
     mach_vm_address_t              orgGetHWChannel{0};
     mach_vm_address_t              orgAdjustVRAMAddress{0};
@@ -52,6 +53,7 @@ public:
 private:
     static bool   allocateHWEngines(void* self);
     static void   wrapSetupAndInitializeHWCapabilities(void* self);
+    static void   wrapGFX9SetupAndInitializeHWCapabilities(void* self);
     static void*  wrapGetHWChannel(void* self, AMDHWEngineType engineType, UInt32 ringId);
     static void   initializeFamilyType(void* self);
     static void*  allocateAMDHWDisplay(void* self);

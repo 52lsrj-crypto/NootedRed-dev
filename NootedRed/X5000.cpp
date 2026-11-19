@@ -187,7 +187,9 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
     PenguinWizardry::PatternRouteRequest requests[] = {
         {"__ZN32AMDRadeonX5000_AMDVega10Hardware17allocateHWEnginesEv", allocateHWEngines},
         {"__ZN32AMDRadeonX5000_AMDVega10Hardware32setupAndInitializeHWCapabilitiesEv",
-         wrapSetupAndInitializeHWCapabilities},
+         wrapSetupAndInitializeHWCapabilities, this->orgSetupAndInitializeHWCapabilities},
+        {"__ZN30AMDRadeonX5000_AMDGFX9Hardware32setupAndInitializeHWCapabilitiesEv",
+         wrapGFX9SetupAndInitializeHWCapabilities, this->orgGFX9SetupAndInitializeHWCapabilities},
         {"__ZN26AMDRadeonX5000_AMDHardware12getHWChannelE20_eAMD_HW_ENGINE_TYPE18_eAMD_HW_RING_TYPE", wrapGetHWChannel,
          this->orgGetHWChannel},
         {"__ZN30AMDRadeonX5000_AMDGFX9Hardware20initializeFamilyTypeEv", initializeFamilyType},
@@ -405,6 +407,21 @@ bool X5000::allocateHWEngines(void* const self)
 // TODO: Replace with IP Discovery?
 void X5000::wrapSetupAndInitializeHWCapabilities(void* const self)
 {
+    FunctionCast(wrapSetupAndInitializeHWCapabilities, singleton().orgSetupAndInitializeHWCapabilities)(self);
+
+    singleton().supportedDisplayCountField(self) = 4;
+    singleton().hasUVD0Field(self)               = false;
+    singleton().hasVCEField(self)                = false;
+    singleton().hasVCN0Field(self)               = VCN::ready();
+    singleton().hasSDMAPagingQueueField(self)    = false;
+    singleton().hasGetAllClockLimitsField(self)  = false;
+    if (currentKernelVersion() >= MACOS_10_15) { singleton().dccDisplayableSupportField(self) = true; }
+
+    SYSLOG("X5000", "Vega10 HW capabilities: displayCount=4, UVD/VCE off, VCN=%u", VCN::ready() ? 1 : 0);
+}
+
+void X5000::wrapGFX9SetupAndInitializeHWCapabilities(void* const self)
+{
     auto& seCount  = singleton().seCountField(self);
     auto& shCount  = singleton().shCountField(self);
     auto& hwMaxCUs = singleton().hwMaxCUsField(self);
@@ -419,18 +436,10 @@ void X5000::wrapSetupAndInitializeHWCapabilities(void* const self)
         hwMaxCUs = 11;
     }
 
-    FunctionCast(wrapSetupAndInitializeHWCapabilities, singleton().orgGFX9SetupAndInitializeHWCapabilities)(self);
-
-    singleton().supportedDisplayCountField(self) = 4;
-    singleton().hasUVD0Field(self)               = false;
-    singleton().hasVCEField(self)                = false;
-    singleton().hasVCN0Field(self)               = VCN::ready();
-    singleton().hasSDMAPagingQueueField(self)    = false;
-    singleton().hasGetAllClockLimitsField(self)  = false;
-    if (currentKernelVersion() >= MACOS_10_15) { singleton().dccDisplayableSupportField(self) = true; }
+    FunctionCast(wrapGFX9SetupAndInitializeHWCapabilities, singleton().orgGFX9SetupAndInitializeHWCapabilities)(self);
 
     NRed::singleton().setProp32("NRedHwMaxCUs", hwMaxCUs);
-    SYSLOG("X5000", "HW capabilities: seCount=%u shCount=%u hwMaxCUs=%u", seCount, shCount, hwMaxCUs);
+    SYSLOG("X5000", "GFX9 HW capabilities: seCount=%u shCount=%u hwMaxCUs=%u", seCount, shCount, hwMaxCUs);
     if (NRed::singleton().getAttributes().isRenoir() && hwMaxCUs == 8) {
         SYSLOG("X5000", "Renoir CU guard: assuming 8 CUs; 6CU SKUs may require a device-specific value");
     }
