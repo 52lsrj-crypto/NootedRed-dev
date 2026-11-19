@@ -9,6 +9,7 @@
 #include <Headers/kern_util.hpp>
 #include <Kexts.hpp>
 #include <NRed.hpp>
+#include <PenguinWizardry/PatcherPlus.hpp>
 #include <libkern/OSTypes.h>
 
 static constexpr UInt32 AMDVendorID        = 0x1002;
@@ -38,6 +39,16 @@ void AppleGFXHDA::processKext(KernelPatcher& patcher, size_t id, mach_vm_address
         {"__ZN24AppleGFXHDAWidgetFactory20createAppleHDAWidgetEP11DevIdStruct", wrapCreateAppleHDAWidget,
          this->orgCreateAppleHDAWidget},
     };
+    for (const auto& request : requests) {
+        const auto address = patcher.solveSymbol(id, request.symbol, slide, size, true);
+        patcher.clearError();
+        if (PenguinWizardry::isShortRouted(address)) {
+            NRed::singleton().setProp32("NRedAppleGFXHDARouteConflict", 1);
+            SYSLOG("AGFXHDA", "%s already short-routed by another plugin; skipping AppleGFXHDA patches",
+                   request.symbol);
+            return;
+        }
+    }
     PANIC_COND(!patcher.routeMultipleLong(id, requests, slide, size), "AGFXHDA", "Failed to route symbols");
 }
 
