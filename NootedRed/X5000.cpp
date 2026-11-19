@@ -196,6 +196,8 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         {"__ZN30AMDRadeonX5000_AMDGFX9Hardware20writeASICHangLogInfoEPPv", returnZero},
         {"__ZN4Addr2V27Gfx9Lib20HwlConvertChipFamilyEjj", wrapHwlConvertChipFamily, this->orgHwlConvertChipFamily,
          kHwlConvertChipFamilyPattern},
+    };
+    PenguinWizardry::PatternRouteRequest surfaceRequests[] = {
         {"__ZN27AMDRadeonX5000_AMDHWDisplay14getDisplayInfoEjbbPvP17_FRAMEBUFFER_INFO", fixedGetDisplayInfo},
         {"__ZN33AMDRadeonX5000_AMDHWAlignManager214getSurfaceInfoEP24_AMD_SURFACE_INFO_STRUCT", fixedGetSurfaceInfo},
     };
@@ -205,6 +207,16 @@ void X5000::processKext(KernelPatcher& patcher, const size_t id, const mach_vm_a
         SYSLOG("X5000", "Failed to route one or more X5000 symbols; see Patcher+ log");
     }
     PANIC_COND(!routeOk, "X5000", "Failed to route symbols");
+
+    if (checkKernelArgument("-NRedSurfaceOverride")) {
+        NRed::singleton().setProp32("NRedSurfaceOverride", 1);
+        PANIC_COND(!PenguinWizardry::PatternRouteRequest::routeAll(patcher, id, surfaceRequests, slide, size), "X5000",
+                   "Failed to route surface/display overrides");
+    }
+    else {
+        NRed::singleton().setProp32("NRedSurfaceOverride", 0);
+        SYSLOG("X5000", "Surface/display overrides disabled; enable with -NRedSurfaceOverride");
+    }
 
     if (currentKernelVersion() >= MACOS_11 && !computeSubmitHookEnabled()) {
         NRed::singleton().setProp32("NRedKernelComputeHook", 0);
@@ -771,7 +783,7 @@ bool X5000::fixedGetDisplayInfo(AMDRadeonX5000_AMDHWDisplay* const self, const U
         hwSpecificInfo.isInterlaced = self->isDisplayInterlaceEnabled(fbIndex);
         displayState.status.setIsInterlaced(hwSpecificInfo.isInterlaced);
 
-        ADDR2_COMPUTE_SURFACE_INFO_INPUT surfInfoInput;
+        ADDR2_COMPUTE_SURFACE_INFO_INPUT surfInfoInput{};
         surfInfoInput.width        = fbInfo->rect.width;
         surfInfoInput.height       = fbInfo->rect.height;
         surfInfoInput.bpp          = displayState.pixelInfo.bitsPerPixel;
@@ -785,6 +797,7 @@ bool X5000::fixedGetDisplayInfo(AMDRadeonX5000_AMDHWDisplay* const self, const U
         self->savedSwizzleModes()[fbIndex]  = surfInfoInput.swizzleMode;
         self->swizzleModes()[fbIndex]       = surfInfoInput.swizzleMode;
         self->savedResourceTypes()[fbIndex] = surfInfoInput.resourceType;
+        self->surfInfoOutputs()[fbIndex] = {};
         if (self->getHWInterface()->getHWAlignManager()->getSurfaceInfo2(&surfInfoInput,
                                                                          &self->surfInfoOutputs()[fbIndex])
             == kIOReturnSuccess)
@@ -804,7 +817,7 @@ bool X5000::fixedGetDisplayInfo(AMDRadeonX5000_AMDHWDisplay* const self, const U
     fbInfo->savedSize = fbInfo->size;
 
     if (self->fedsParamInfo()[fbIndex].crtIndex != 0) {
-        ADDR2_COMPUTE_SURFACE_INFO_INPUT surfInfoInput;
+        ADDR2_COMPUTE_SURFACE_INFO_INPUT surfInfoInput{};
         surfInfoInput.width        = self->fedsParamInfo()[fbIndex].scaledW;
         surfInfoInput.height       = self->fedsParamInfo()[fbIndex].scaledH;
         surfInfoInput.bpp          = displayState.pixelInfo.bitsPerPixel;
@@ -814,7 +827,7 @@ bool X5000::fixedGetDisplayInfo(AMDRadeonX5000_AMDHWDisplay* const self, const U
         surfInfoInput.numSamples = 1;
         surfInfoInput.numSlices  = 1;
         surfInfoInput.flags.display = true;
-        ADDR2_COMPUTE_SURFACE_INFO_OUTPUT surfInfoOutput;
+        ADDR2_COMPUTE_SURFACE_INFO_OUTPUT surfInfoOutput{};
         if (self->getHWInterface()->getHWAlignManager()->getSurfaceInfo2(&surfInfoInput, &surfInfoOutput)
             == kIOReturnSuccess)
         {
@@ -843,7 +856,7 @@ void X5000::fixedGetSurfaceInfo(AMDRadeonX5000_AMDHWAlignManager* const self, AM
 
     if (pStruct->version != 1 || pStruct->revision != 0 || pStruct->sizeOf != sizeof(*pStruct)) { return; }
 
-    ADDR2_COMPUTE_SURFACE_INFO_INPUT input;
+    ADDR2_COMPUTE_SURFACE_INFO_INPUT input{};
     input.width         = pStruct->inWidth;
     input.height        = pStruct->inHeight;
     input.bpp           = pStruct->bytesPerPixel * 8;
@@ -853,7 +866,7 @@ void X5000::fixedGetSurfaceInfo(AMDRadeonX5000_AMDHWAlignManager* const self, AM
     input.flags.display = 1;
     input.swizzleMode   = self->getPreferredSwizzleMode2(&input);    // this was hardcoded to 0xa
 
-    ADDR2_COMPUTE_SURFACE_INFO_OUTPUT output;
+    ADDR2_COMPUTE_SURFACE_INFO_OUTPUT output{};
     if (self->getSurfaceInfo2(&input, &output) == kIOReturnSuccess) {
         pStruct->outWidth      = static_cast<UInt16>(output.pitch);
         pStruct->outHeight     = static_cast<UInt16>(output.height);
