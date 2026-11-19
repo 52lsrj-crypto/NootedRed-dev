@@ -1,7 +1,7 @@
 # NootedRed 深度分析报告
 
 > 分析对象：`weixin_47785647/NootedRed-dev`（fork 自 `ChefKissInc/NootedRed`，基线 2026-10-10）
-> 代码版本：GitHub `main` 提交 `2c1a74b`（含 compute Hook、Long 路由、AppleGFXHDA 冲突修复与诊断加固）
+> 代码版本：GitHub `main` 提交 `708ce43`（`2c1a74b` + 本报告/图 + AppleGFXHDA widget 修复；含 compute Hook、Long 路由、冲突检测与诊断加固）
 > 目标平台：AMD APU（Raven / Picasso / Renoir / GreenSardine）+ macOS 14/15/26（Darwin 23/24/25），x86_64
 > 分析方式：源码静态审计 + CI 产物符号/反汇编 + Lilu 源码对照
 >
@@ -820,7 +820,7 @@ Lilu patcher: @ previous plugin had short jump type on a multiroute function
 | P0-5 | `notifyGfxAccess` 传参类型错配 | 未修（默认关闭 Renoir） | 从 channel 取真正 hardware，或移除调用 |
 | P0-6 | AppleGFXHDA 路由与其他插件（疑似 AppleALC）的 short jump 冲突 | 已加检测/跳过（`c8b37c5`）；冲突源待确认 | 实机验证 HDA 功能，并做插件排除对照 |
 | P0-7 | RuntimeMC 冲突跳过后 `mcVft` 未初始化，但 X5000 仍 `registerMC` → DCN 半初始化 | 未修 | 把冲突状态传给 DCN，冲突时完全禁用 meta class 注入 |
-| P0-8 | `AppleGFXHDA::wrapCreateAppleHDAWidget` 非 AMD 分支误调 `orgCreateAppleHDAFunctionGroup` | 本次修复 | 已改为 `orgCreateAppleHDAWidget`，需 CI/实机确认 |
+| P0-8 | `AppleGFXHDA::wrapCreateAppleHDAWidget` 非 AMD 分支误调 `orgCreateAppleHDAFunctionGroup` | 已修（`708ce43`） | 已改为 `orgCreateAppleHDAWidget`，需 CI/实机确认 |
 
 ### P1：硬件/版本正确性
 
@@ -1002,7 +1002,7 @@ NootedRed 的核心价值不是“写一个 APU 驱动”，而是**把 Apple �
 
 - 本仓库 `README.md`、`docs/boot-arguments.md`、`docs/vpf-architecture.md`、`docs/dvpf-architecture.md`、`docs/macos-multi-os-compat.md`、`docs/validation-4800u-sonoma-14.8.9.md`。
 - Lilu 源码：`Lilu/Headers/kern_api.hpp`、`Lilu/Sources/kern_start.cpp`、`Lilu/Sources/kern_patcher.cpp`。
-- 本报告引用的 CI run：`44463392849`（`2c1a74b`，Build Release x86_64 success）。
+- 本报告引用的 CI run：`44463392849`（`2c1a74b`，Build Release x86_64 success）、`44474738284`（`708ce43`，Build Release x86_64 success）。
 - 现场崩溃样本：issue #1（AppleGFXHDA 路由 multiroute panic；疑似 AppleALC 冲突）与 GPU restart/watchdog 日志。
 
 ---
