@@ -77,7 +77,7 @@ python3 tools/run_all_tests.py --filter fvrc     # 只跑名字匹配的脚本
 - [进程过滤与 FVRC 复用](docs/process-filter-fvrc.md) / [后续优化计划](docs/improvement-plan.md)
 - [EC 背光重写](docs/ec-backlight-rewrite.md) / [故障归因](docs/ec-backlight-comparison.md)
 - [内核显示证据](docs/kernel-display-evidence.md) / [兼容矩阵](docs/vpf-compatibility-matrix.md)
-- [4800U + macOS 14.8.9 测试验证](docs/validation-4800u-sonoma-14.8.9.md)
+- [4800U + macOS 14.8.9 测试验证](docs/validation-4800u-sonoma-14.8.9.md) / [4800U 实机验证成功记录与回退组合（2026-11-19）](docs/validation-4800u-success-2026-11-19.md)
 
 ## 已知限制
 
