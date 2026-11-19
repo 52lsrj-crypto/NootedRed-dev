@@ -69,6 +69,7 @@ python3 tools/run_all_tests.py --filter fvrc     # 只跑名字匹配的脚本
 
 ## 文档
 
+- [NootedRed 深度分析报告（含架构总览、启动时序、崩溃链图）](docs/nootedred-deep-analysis.md)
 - [启动参数](docs/boot-arguments.md)
 - [共享缓存补丁框架（VPF）](docs/vpf-architecture.md) / [显示域（DVPF）](docs/dvpf-architecture.md)
 - [多系统适配](docs/macos-multi-os-compat.md) / [用户态动态缓存匹配](docs/user-cache-dynamic.md)
