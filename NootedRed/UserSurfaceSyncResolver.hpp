@@ -600,6 +600,11 @@ namespace UserSurfaceSyncResolver
                                                           || value == fn.original[i];
                                                }))
             {
+                if (VPF::diagCandAddr == 0) {
+                    VPF::diagCandAddr = address;
+                    memcpy(VPF::diagCandBytes, entry, sizeof(entry));
+                    VPF::diagCandTextRel = static_cast<UInt32>(address - image.text.address);
+                }
                 VPF::markFail(VPF::FailEntryBytes);
                 return false;
             }
