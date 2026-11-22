@@ -218,6 +218,8 @@ namespace
     // 驱动 __TEXT 在缓存中的相对偏移（15.8.3 夹具值）。用于确认候选 base 真的是本缓存。
     constexpr UInt64 DriverTextRelative = 0x308757000ULL;
 
+    bool submitProbeAt(UInt64 candidateBase);
+
     bool driverTextAt(UInt64 candidateBase)
     {
         UInt8 magic[4];
@@ -226,7 +228,17 @@ namespace
         if (readUser(candidateBase + DriverTextRelative, magic, sizeof(magic)) != 0) { return false; }
         UInt32 value;
         memcpy(&value, magic, sizeof(value));
-        return value == 0xFEEDFACF;
+        return value == 0xFEEDFACF && submitProbeAt(candidateBase);
+    }
+
+    // 真伪基址的终局判据：submit 函数入口字节必须存在。子缓存/任意 mach 头都过不了这一关。
+    bool submitProbeAt(UInt64 candidateBase)
+    {
+        static const UInt8 expect[8] = {0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x10};
+        UInt8              got[8];
+        if (readUser == nullptr) { return false; }
+        if (readUser(candidateBase + DriverTextRelative + 0x6C580ULL, got, sizeof(got)) != 0) { return false; }
+        return memcmp(got, expect, sizeof(expect)) == 0;
     }
 
     // 15.8.3 上运行时给出的 base 可能落在任意镜像的代码段，主缓存固定自 CacheBase 起映射，
@@ -526,6 +538,8 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
     // vImage），既不是主缓存基址也不是子缓存基址，magic 校验必然不过。x86_64 上主缓存固定从 CacheBase
     // 起映射，slide 不超过头部 maxSlide，因此按页扫描定位真正的主缓存头部。
     {
+        NRed::singleton().setProp32("NRedDiagLastHintLo", static_cast<UInt32>(base));
+        NRed::singleton().setProp32("NRedDiagLastHintHi", static_cast<UInt32>(base >> 32));
         UInt8 found[456];
         const auto resolved = discoverCacheBase(base, found);
         if (resolved == 0) {
@@ -554,6 +568,10 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
             base = resolved;
         }
         memcpy(header, found, sizeof(header));
+        NRed::singleton().setProp32("NRedDiagLastPid", static_cast<UInt32>(proc_pid(process)));
+        NRed::singleton().setProp32("NRedDiagLastBaseLo", static_cast<UInt32>(base));
+        NRed::singleton().setProp32("NRedDiagLastBaseHi", static_cast<UInt32>(base >> 32));
+        NRed::singleton().setProp32("NRedDiagLastProbe", submitProbeAt(base) ? 1 : 0);
     }
     auto&      plan            = workspace.value->plan;
     auto&      input           = plan.input;
