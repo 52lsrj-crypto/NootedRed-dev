@@ -48,4 +48,5 @@ namespace VPF
     inline UInt64 diagImgAddr{0}, diagTextAddr{0}, diagTextSize{0};
     inline UInt32 diagSegs{0}, diagFirst4{0}, diagFirst4Ok{0};
     inline UInt32 diagProbe4{0}, diagProbeOk{0}, diagTextReadRc{0};
+    inline UInt32 diagFailFn{0xFFFFFFFF}, diagCandidates{0}, diagFoundAddr{0};
 }

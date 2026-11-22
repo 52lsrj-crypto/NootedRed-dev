@@ -551,10 +551,17 @@ namespace UserCacheResolver
                     return false;
                 }
             }
-            else if (!find(input, images[functions[i].image].text, functions[i], i, patches, locations, PatchCount,
-                           addresses[i], variants[i], dataTargetsMatch))
+            else
             {
-                return false;
+                if (!find(input, images[functions[i].image].text, functions[i], i, patches, locations, PatchCount,
+                          addresses[i], variants[i], dataTargetsMatch))
+                {
+                    VPF::diagFailFn    = i;
+                    VPF::diagCandidates = input.candidates;
+                    VPF::markFail(VPF::FailScan);
+                    return false;
+                }
+                VPF::diagFoundAddr = static_cast<UInt32>(addresses[i]);
             }
             if (located) { located[i] = {addresses[i], variants[i]}; }
             for (UInt32 j = 0; j < i; ++j) {
