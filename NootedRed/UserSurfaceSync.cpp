@@ -421,22 +421,20 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
         stage(Stage::CacheRead);
         return result;
     }
-    if (memcmp(header, CacheMagic, sizeof(CacheMagic)) != 0) {
-        // 15.8.3 实测：部分进程给出的 startAddress 并非"指向共享缓存基址的指针"，
-        // 读出来的 base 落在其它镜像的代码段（本例落在 vImage __TEXT），magic 不符。
-        // x86_64 共享缓存固定映射在 CacheBase，回退到该地址并重新校验。
-        UInt8 fallback[104];
-        if (readUser(CacheBase, fallback, sizeof(fallback)) == 0
-            && memcmp(fallback, CacheMagic, sizeof(CacheMagic)) == 0)
-        {
+    // 15.8.3 实测：startAddress 给出的 base 指向的是**子缓存(subcache)头部**，magic 同样是
+    // "dyld_v1"，但相对布局与参考数据（以主缓存基址为基准）整体偏移，导致函数体/引用全部对不上。
+    // x86_64 主缓存固定映射在 CacheBase，只要该处 magic 有效就以它为唯一基准。
+    {
+        UInt8 mainHeader[104];
+        const bool mainOk = readUser(CacheBase, mainHeader, sizeof(mainHeader)) == 0
+                            && memcmp(mainHeader, CacheMagic, sizeof(CacheMagic)) == 0;
+        if (mainOk) {
+            if (base != CacheBase) { NRed::singleton().setProp32("NRedDiagBaseForced", 1); }
             base = CacheBase;
-            memcpy(header, fallback, sizeof(header));
-            NRed::singleton().setProp32("NRedDiagBaseFixed", 1);
-            stage(Stage::Called);
+            memcpy(header, mainHeader, sizeof(header));
         }
-        else
-        {
-            NRed::singleton().setProp32("NRedDiagBaseFallbackFailed", 1);
+        else if (memcmp(header, CacheMagic, sizeof(CacheMagic)) != 0) {
+            NRed::singleton().setProp32("NRedDiagBaseForceFail", 1);
             stage(Stage::CacheMismatch);
             return result;
         }
