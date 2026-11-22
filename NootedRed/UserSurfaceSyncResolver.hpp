@@ -548,6 +548,17 @@ namespace UserSurfaceSyncResolver
     {
         Image image;
         if (!imageForCache(input, base, image)) { VPF::markFail(VPF::FailImageForCache); return false; }
+        if (VPF::diagTextSize == 0) {
+            VPF::diagImgAddr  = image.address;
+            VPF::diagTextAddr = image.text.address;
+            VPF::diagTextSize = image.text.size;
+            VPF::diagSegs     = image.segmentCount;
+            UInt8 probe[4]    = {};
+            if (input.read(image.text.address, probe, sizeof(probe)) == 0) {
+                memcpy(&VPF::diagFirst4, probe, sizeof(probe));
+                VPF::diagFirst4Ok = 1;
+            }
+        }
         if (image.segmentCount > 8 || fn.size < 32) { VPF::markFail(VPF::FailSegmentOrSize); return false; }
         UserCacheResolver::ImageBounds bounds{};
         if (!imageBounds(image, bounds)) { VPF::markFail(VPF::FailImageBounds); return false; }

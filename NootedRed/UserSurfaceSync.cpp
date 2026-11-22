@@ -144,8 +144,18 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
         memcpy(&value, uuid + i * 4, sizeof(value));
         NRed::singleton().setProp32(uuidKeys[i], value);
     }
-    // 诊断：解析失败的具体阶段码与各阶段累计次数（始终发布，不依赖 -NRedRejectTrace）。
-    NRed::singleton().setProp32("NRedDiagStage", __atomic_load_n(&VPF::lastFailStage, __ATOMIC_RELAXED));
+    // 诊断：失败阶段码与各阶段计数（不依赖 -NRedRejectTrace）
+    NRed::singleton().setProp32("NRedDiagStage", VPF::lastFailStage);
+    if (VPF::diagTextSize != 0) {
+        NRed::singleton().setProp32("NRedDiagImgAddrLo", static_cast<UInt32>(VPF::diagImgAddr));
+        NRed::singleton().setProp32("NRedDiagImgAddrHi", static_cast<UInt32>(VPF::diagImgAddr >> 32));
+        NRed::singleton().setProp32("NRedDiagTextAddrLo", static_cast<UInt32>(VPF::diagTextAddr));
+        NRed::singleton().setProp32("NRedDiagTextAddrHi", static_cast<UInt32>(VPF::diagTextAddr >> 32));
+        NRed::singleton().setProp32("NRedDiagTextSize", static_cast<UInt32>(VPF::diagTextSize));
+        NRed::singleton().setProp32("NRedDiagSegs", VPF::diagSegs);
+        NRed::singleton().setProp32("NRedDiagFirst4", VPF::diagFirst4);
+        NRed::singleton().setProp32("NRedDiagFirst4Ok", VPF::diagFirst4Ok);
+    }
     NRed::singleton().setProp32("NRedDiagBaseLo", static_cast<UInt32>(base));
     NRed::singleton().setProp32("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));
     for (UInt32 stage = 1; stage < 16; ++stage) {

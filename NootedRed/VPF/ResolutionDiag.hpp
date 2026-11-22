@@ -33,3 +33,10 @@ namespace VPF
         __atomic_add_fetch(&failStageCounts[stage < 16 ? stage : 15], 1U, __ATOMIC_RELAXED);
     }
 } // namespace VPF
+
+namespace VPF
+{
+    // 提交路径首次 imageForCache 成功时的镜像/文本布局快照，供 ioreg 侧核对。
+    inline UInt64 diagImgAddr{0}, diagTextAddr{0}, diagTextSize{0};
+    inline UInt32 diagSegs{0}, diagFirst4{0}, diagFirst4Ok{0};
+}
