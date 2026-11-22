@@ -174,6 +174,61 @@ RejectSite submitRejects, displayRejects;
 UserRejectedCaches::Table rejectedCaches;
 UInt32                    rejectedSkips{0};
 bool                      publishedGoodBase{false};
+
+namespace
+{
+    inline UInt64 readWide(const UInt8* p)
+    {
+        UInt64 v;
+        memcpy(&v, p, sizeof(v));
+        return v;
+    }
+
+    // 校验某个地址是否是共享缓存主头部（magic + unslid/size/maxSlide 自洽）。
+    bool cacheHeaderAt(UInt64 candidate, UInt8* out)
+    {
+        static constexpr char Magic[16] = {'d', 'y', 'l', 'd', '_', 'v', '1', ' ',
+                                           'x', '8', '6', '_', '6', '4', 'h', 0};
+        UInt8                   h[456];
+        if (candidate < UserSurfaceSyncData::CacheBase || candidate >= UserSurfaceSyncResolver::UserLimit - sizeof(h)) { return false; }
+        if ((candidate & (PAGE_SIZE - 1)) != 0 || readUser == nullptr) { return false; }
+        if (readUser(candidate, h, sizeof(h)) != 0 || memcmp(h, Magic, sizeof(Magic)) != 0) { return false; }
+        const auto unslid = readWide(h + 224), size = readWide(h + 232), maxSlide = readWide(h + 240);
+        if (unslid == 0 || size == 0 || candidate < unslid || candidate - unslid > maxSlide) { return false; }
+        if (size > UserSurfaceSyncResolver::UserLimit - candidate) { return false; }
+        memcpy(out, h, sizeof(h));
+        return true;
+    }
+
+    // 15.8.3 上运行时给出的 base 可能落在任意镜像的代码段，主缓存固定自 CacheBase 起映射，
+    // 因此按页在 [CacheBase, CacheBase + 512MB) 内定位真正的主头部；结果按 task 缓存。
+    UInt64 discoverCacheBase(UInt64 hint, UInt8* out)
+    {
+        static task_t  cachedTask{nullptr};
+        static UInt64  cachedBase{0};
+        UInt8          h[456];
+        if (cachedBase != 0 && cachedTask == current_task()) {
+            if (cacheHeaderAt(cachedBase, h)) { memcpy(out, h, sizeof(h)); return cachedBase; }
+            cachedBase = 0;
+        }
+        if (cacheHeaderAt(hint, h)) {
+            cachedTask = current_task();
+            cachedBase = hint;
+            memcpy(out, h, sizeof(h));
+            return hint;
+        }
+        constexpr UInt64 ProbeWindow = 0x20000000ULL;
+        for (UInt64 candidate = UserSurfaceSyncData::CacheBase; candidate < UserSurfaceSyncData::CacheBase + ProbeWindow; candidate += PAGE_SIZE) {
+            if (cacheHeaderAt(candidate, h)) {
+                cachedTask = current_task();
+                cachedBase = candidate;
+                memcpy(out, h, sizeof(h));
+                return candidate;
+            }
+        }
+        return 0;
+    }
+}
 const char* const         submitRejectUUIDKeys[]  = {"NRedSubmitGuardRejectUUID0", "NRedSubmitGuardRejectUUID1",
                                                      "NRedSubmitGuardRejectUUID2", "NRedSubmitGuardRejectUUID3"};
 const char* const         displayRejectUUIDKeys[] = {"NRedImmediateSyncRejectUUID0", "NRedImmediateSyncRejectUUID1",
@@ -421,23 +476,25 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
         stage(Stage::CacheRead);
         return result;
     }
-    // 15.8.3 实测：startAddress 给出的 base 指向的是**子缓存(subcache)头部**，magic 同样是
-    // "dyld_v1"，但相对布局与参考数据（以主缓存基址为基准）整体偏移，导致函数体/引用全部对不上。
-    // x86_64 主缓存固定映射在 CacheBase，只要该处 magic 有效就以它为唯一基准。
+    // 15.8.3 实测：startAddress / 协调器给出的 base 可能落在任意镜像的代码段（MPSImage / GeoServices /
+    // vImage），既不是主缓存基址也不是子缓存基址，magic 校验必然不过。x86_64 上主缓存固定从 CacheBase
+    // 起映射，slide 不超过头部 maxSlide，因此按页扫描定位真正的主缓存头部。
     {
-        UInt8 mainHeader[104];
-        const bool mainOk = readUser(CacheBase, mainHeader, sizeof(mainHeader)) == 0
-                            && memcmp(mainHeader, CacheMagic, sizeof(CacheMagic)) == 0;
-        if (mainOk) {
-            if (base != CacheBase) { NRed::singleton().setProp32("NRedDiagBaseForced", 1); }
-            base = CacheBase;
-            memcpy(header, mainHeader, sizeof(header));
-        }
-        else if (memcmp(header, CacheMagic, sizeof(CacheMagic)) != 0) {
-            NRed::singleton().setProp32("NRedDiagBaseForceFail", 1);
+        UInt8 found[456];
+        const auto resolved = discoverCacheBase(base, found);
+        if (resolved == 0) {
+            NRed::singleton().setProp32("NRedDiagBaseNotFound", 1);
             stage(Stage::CacheMismatch);
             return result;
         }
+        NRed::singleton().setProp32("NRedDiagBaseFound", 1);
+        if (resolved != base) {
+            NRed::singleton().setProp32("NRedDiagBaseHintLo", static_cast<UInt32>(base));
+            NRed::singleton().setProp32("NRedDiagBaseHintHi", static_cast<UInt32>(base >> 32));
+            NRed::singleton().setProp32("NRedDiagBaseSlide", static_cast<UInt32>(resolved - CacheBase));
+            base = resolved;
+        }
+        memcpy(header, found, sizeof(header));
     }
     auto&      plan            = workspace.value->plan;
     auto&      input           = plan.input;
