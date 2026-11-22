@@ -155,6 +155,11 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
         NRed::singleton().setProp32("NRedDiagSegs", VPF::diagSegs);
         NRed::singleton().setProp32("NRedDiagFirst4", VPF::diagFirst4);
         NRed::singleton().setProp32("NRedDiagFirst4Ok", VPF::diagFirst4Ok);
+        NRed::singleton().setProp32("NRedDiagTextReadRc", VPF::diagTextReadRc);
+        NRed::singleton().setProp32("NRedDiagProbe4", VPF::diagProbe4);
+        NRed::singleton().setProp32("NRedDiagProbeOk", VPF::diagProbeOk);
+        const auto curPid = proc_pid(current_task());
+        if (curPid > 0) { NRed::singleton().setProp32("NRedDiagCurPID", static_cast<UInt32>(curPid)); }
     }
     NRed::singleton().setProp32("NRedDiagBaseLo", static_cast<UInt32>(base));
     NRed::singleton().setProp32("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));

@@ -554,9 +554,16 @@ namespace UserSurfaceSyncResolver
             VPF::diagTextSize = image.text.size;
             VPF::diagSegs     = image.segmentCount;
             UInt8 probe[4]    = {};
-            if (input.read(image.text.address, probe, sizeof(probe)) == 0) {
+            VPF::diagTextReadRc = static_cast<UInt32>(input.read(image.text.address, probe, sizeof(probe)));
+            if (VPF::diagTextReadRc == 0) {
                 memcpy(&VPF::diagFirst4, probe, sizeof(probe));
                 VPF::diagFirst4Ok = 1;
+            }
+            // 已知参考相对偏移 0x6C580：若此处是 55 48 89 E5，说明驱动就在进程内，问题只在扫描几何。
+            UInt8 probe2[4] = {};
+            if (input.read(image.address + 0x6C580, probe2, sizeof(probe2)) == 0) {
+                memcpy(&VPF::diagProbe4, probe2, sizeof(probe2));
+                VPF::diagProbeOk = 1;
             }
         }
         if (image.segmentCount > 8 || fn.size < 32) { VPF::markFail(VPF::FailSegmentOrSize); return false; }
