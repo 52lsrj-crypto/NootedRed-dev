@@ -215,6 +215,20 @@ namespace
         return true;
     }
 
+    // 驱动 __TEXT 在缓存中的相对偏移（15.8.3 夹具值）。用于确认候选 base 真的是本缓存。
+    constexpr UInt64 DriverTextRelative = 0x308757000ULL;
+
+    bool driverTextAt(UInt64 candidateBase)
+    {
+        UInt8 magic[4];
+        UInt8 scratch[456];
+        if (readUser == nullptr || !cacheHeaderAt(candidateBase, scratch)) { return false; }
+        if (readUser(candidateBase + DriverTextRelative, magic, sizeof(magic)) != 0) { return false; }
+        UInt32 value;
+        memcpy(&value, magic, sizeof(value));
+        return value == 0xFEEDFACF;
+    }
+
     // 15.8.3 上运行时给出的 base 可能落在任意镜像的代码段，主缓存固定自 CacheBase 起映射，
     // 因此按页在 [CacheBase, CacheBase + 512MB) 内定位真正的主头部；结果按 task 缓存。
     UInt64 discoverCacheBase(UInt64 hint, UInt8* out)
@@ -226,7 +240,23 @@ namespace
             if (cacheHeaderAt(cachedBase, h)) { memcpy(out, h, sizeof(h)); return cachedBase; }
             cachedBase = 0;
         }
-        if (cacheHeaderAt(hint, h)) {
+        // 15.8.3 实测：hint 的低 32 位 bit31 会被清掉（真实 0x7FF8844D8000 → 读到 0x7FF8044D8000），
+        // 先围绕 hint 枚举翻转 bit31 / 加减 2GB 的候选，再用头部三重校验挑真身。
+        const UInt64 candidates[] = {hint, hint ^ 0x80000000ULL, hint + 0x80000000ULL, hint - 0x80000000ULL,
+                                     hint ^ 0x40000000ULL, hint ^ 0xC0000000ULL};
+        for (const auto candidate : candidates) {
+            if (candidate != 0 && candidate != hint && cacheHeaderAt(candidate, h) && driverTextAt(candidate)) {
+                NRed::singleton().setProp32("NRedDiagBaseFlip", 1);
+                NRed::singleton().setProp32("NRedDiagBaseRealLo", static_cast<UInt32>(candidate));
+                NRed::singleton().setProp32("NRedDiagBaseRealHi", static_cast<UInt32>(candidate >> 32));
+                cachedTask = current_task();
+                cachedBase = candidate;
+                memcpy(out, h, sizeof(h));
+                return candidate;
+            }
+        }
+        if (cacheHeaderAt(hint, h) && driverTextAt(hint)) {
+            NRed::singleton().setProp32("NRedDiagBaseDirect", 1);
             cachedTask = current_task();
             cachedBase = hint;
             memcpy(out, h, sizeof(h));
@@ -234,7 +264,8 @@ namespace
         }
         constexpr UInt64 ProbeWindow = 0x20000000ULL;
         for (UInt64 candidate = UserSurfaceSyncData::CacheBase; candidate < UserSurfaceSyncData::CacheBase + ProbeWindow; candidate += PAGE_SIZE) {
-            if (cacheHeaderAt(candidate, h)) {
+            if (cacheHeaderAt(candidate, h) && driverTextAt(candidate)) {
+                NRed::singleton().setProp32("NRedDiagBaseScan", 1);
                 cachedTask = current_task();
                 cachedBase = candidate;
                 memcpy(out, h, sizeof(h));
