@@ -158,20 +158,6 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
         NRed::singleton().setProp32("NRedDiagTextReadRc", VPF::diagTextReadRc);
         NRed::singleton().setProp32("NRedDiagProbe4", VPF::diagProbe4);
         NRed::singleton().setProp32("NRedDiagProbeOk", VPF::diagProbeOk);
-        if (VPF::diagCandAddr != 0) {
-            NRed::singleton().setProp32("NRedDiagCandLo", static_cast<UInt32>(VPF::diagCandAddr));
-            NRed::singleton().setProp32("NRedDiagCandHi", static_cast<UInt32>(VPF::diagCandAddr >> 32));
-            NRed::singleton().setProp32("NRedDiagCandRel", VPF::diagCandTextRel);
-            UInt32 w0 = 0, w1 = 0, w2 = 0, w3 = 0;
-            memcpy(&w0, VPF::diagCandBytes + 0, 4);
-            memcpy(&w1, VPF::diagCandBytes + 4, 4);
-            memcpy(&w2, VPF::diagCandBytes + 8, 4);
-            memcpy(&w3, VPF::diagCandBytes + 12, 4);
-            NRed::singleton().setProp32("NRedDiagCandW0", w0);
-            NRed::singleton().setProp32("NRedDiagCandW1", w1);
-            NRed::singleton().setProp32("NRedDiagCandW2", w2);
-            NRed::singleton().setProp32("NRedDiagCandW3", w3);
-        }
         const auto curPid = proc_selfpid();
         if (curPid > 0) { NRed::singleton().setProp32("NRedDiagCurPID", static_cast<UInt32>(curPid)); }
     }
