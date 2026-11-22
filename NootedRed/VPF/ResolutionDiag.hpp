@@ -49,4 +49,5 @@ namespace VPF
     inline UInt32 diagSegs{0}, diagFirst4{0}, diagFirst4Ok{0};
     inline UInt32 diagProbe4{0}, diagProbeOk{0}, diagTextReadRc{0};
     inline UInt32 diagFailFn{0xFFFFFFFF}, diagCandidates{0}, diagFoundAddr{0};
+    inline UInt32 diagPhase{0};  // 100+i=函数i完成定位, 20=引用复核过, 30=补丁规划过, 5=入口, 4=known分支
 }

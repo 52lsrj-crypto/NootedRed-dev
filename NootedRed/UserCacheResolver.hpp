@@ -500,6 +500,7 @@ namespace UserCacheResolver
     {
         static_assert(ImageCount > 0 && ImageCount <= 16 && FunctionCount > 0 && FunctionCount <= 32);
         if (scopedTargetCount > 128 || (scopedTargets == nullptr) != (scopedTargetCount == 0)) { return false; }
+        VPF::diagPhase = 5;
         UInt64 addresses[FunctionCount]{};
         bool   variants[FunctionCount]{};
         for (UInt32 i = 0; i < FunctionCount; ++i) {
@@ -535,6 +536,7 @@ namespace UserCacheResolver
                 }
                 return true;
             };
+            VPF::diagPhase = 4;
             if (known) {
                 const auto& location = known[i];
                 if (location.address == 0 || location.patched > 1
@@ -563,6 +565,7 @@ namespace UserCacheResolver
                 }
                 VPF::diagFoundAddr = static_cast<UInt32>(addresses[i]);
             }
+            VPF::diagPhase = 100 + i;
             if (located) { located[i] = {addresses[i], variants[i]}; }
             for (UInt32 j = 0; j < i; ++j) {
                 if (Range{addresses[j], functions[j].size}.contains(addresses[i], 1)
@@ -573,6 +576,7 @@ namespace UserCacheResolver
                 }
             }
         }
+        VPF::diagPhase = 19;
         for (UInt32 i = 0; i < FunctionCount; ++i) {
             const auto& fn    = functions[i];
             const auto* refs  = variants[i] ? fn.patchedRefs : fn.originalRefs;
@@ -592,6 +596,7 @@ namespace UserCacheResolver
                 }
             }
         }
+        VPF::diagPhase = 20;
         for (UInt32 p = 0; p < PatchCount; ++p) {
             const auto loc = locations[p];
             if (loc.function >= FunctionCount || patches[p].size == 0 || patches[p].size > stride) { VPF::markFail(VPF::FailPatchRange); return false; }
