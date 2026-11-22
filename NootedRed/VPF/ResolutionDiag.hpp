@@ -21,16 +21,24 @@ namespace VPF
         FailResolveImages   = 12,  // resolveImages 失败
         FailDisplayImage    = 13,  // 显示路径 imageForCache 失败
         FailDisplayOther    = 14,  // 显示路径其它失败
-        FailMax             = 15,
+        FailFnImageRange    = 15,  // functions[i].image >= ImageCount
+        FailFnKnownLoc      = 16,  // known 位置校验失败
+        FailFnDataRefs      = 17,  // dataTargetsMatch 失败
+        FailRefVerify       = 18,  // 全量引用复核失败（target/relative/binding）
+        FailPatchRange      = 19,  // 补丁范围/stride/越界
+        FailPatchRefs       = 20,  // 补丁内引用重定位失败
+        FailPatchOverlap    = 21,  // 补丁区间重叠
+        FailFnOverlap       = 22,  // 函数区间重叠
+        FailMax             = 23,
     };
 
     inline UInt32 lastFailStage{0};
-    inline UInt32 failStageCounts[16]{};
+    inline UInt32 failStageCounts[24]{};
 
     inline void markFail(const UInt32 stage)
     {
         __atomic_store_n(&lastFailStage, stage, __ATOMIC_RELAXED);
-        __atomic_add_fetch(&failStageCounts[stage < 16 ? stage : 15], 1U, __ATOMIC_RELAXED);
+        __atomic_add_fetch(&failStageCounts[stage < 24 ? stage : 23], 1U, __ATOMIC_RELAXED);
     }
 } // namespace VPF
 

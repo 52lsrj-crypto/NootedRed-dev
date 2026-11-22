@@ -1,5 +1,6 @@
 // 完整函数匹配与 rel32 重建；不认识的实现或外部目标布局一律拒绝。
 #pragma once
+#include <VPF/ResolutionDiag.hpp>
 #include <UserCacheSectionData.hpp>
 #include <UserSharedCache.hpp>
 
@@ -502,7 +503,7 @@ namespace UserCacheResolver
         UInt64 addresses[FunctionCount]{};
         bool   variants[FunctionCount]{};
         for (UInt32 i = 0; i < FunctionCount; ++i) {
-            if (functions[i].image >= ImageCount) { return false; }
+            if (functions[i].image >= ImageCount) { VPF::markFail(VPF::FailFnImageRange); return false; }
             const auto dataTargetsMatch = [&](UInt64 candidate, bool variant)
             {
                 const auto& fn    = functions[i];
@@ -539,6 +540,7 @@ namespace UserCacheResolver
                 if (location.address == 0 || location.patched > 1
                     || !images[functions[i].image].text.contains(location.address, functions[i].size))
                 {
+                    VPF::markFail(VPF::FailFnKnownLoc);
                     return false;
                 }
                 addresses[i] = location.address;
@@ -559,6 +561,7 @@ namespace UserCacheResolver
                 if (Range{addresses[j], functions[j].size}.contains(addresses[i], 1)
                     || Range{addresses[i], functions[i].size}.contains(addresses[j], 1))
                 {
+                    VPF::markFail(VPF::FailFnOverlap);
                     return false;
                 }
             }
@@ -584,11 +587,11 @@ namespace UserCacheResolver
         }
         for (UInt32 p = 0; p < PatchCount; ++p) {
             const auto loc = locations[p];
-            if (loc.function >= FunctionCount || patches[p].size == 0 || patches[p].size > stride) { return false; }
+            if (loc.function >= FunctionCount || patches[p].size == 0 || patches[p].size > stride) { VPF::markFail(VPF::FailPatchRange); return false; }
             const auto& fn = functions[loc.function];
-            if (loc.offset > fn.size || patches[p].size > fn.size - loc.offset) { return false; }
+            if (loc.offset > fn.size || patches[p].size > fn.size - loc.offset) { VPF::markFail(VPF::FailPatchRange); return false; }
             const auto address = addresses[loc.function] + loc.offset;
-            if (!input.cache.contains(address, patches[p].size)) { return false; }
+            if (!input.cache.contains(address, patches[p].size)) { VPF::markFail(VPF::FailPatchRange); return false; }
             auto* original    = originals + p * stride;
             auto* replacement = replacements + p * stride;
             memcpy(original, patches[p].original, patches[p].size);
@@ -610,6 +613,7 @@ namespace UserCacheResolver
                         || !setRelative(variant ? replacement : original, refs[r].offset - loc.offset, address,
                                         destination))
                     {
+                        VPF::markFail(VPF::FailPatchRefs);
                         return false;
                     }
                 }
@@ -619,6 +623,7 @@ namespace UserCacheResolver
                 if (Range{base + output[j].offset, output[j].size}.contains(address, 1)
                     || Range{address, patches[p].size}.contains(base + output[j].offset, 1))
                 {
+                    VPF::markFail(VPF::FailPatchOverlap);
                     return false;
                 }
             }

@@ -163,7 +163,7 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
     }
     NRed::singleton().setProp32("NRedDiagBaseLo", static_cast<UInt32>(base));
     NRed::singleton().setProp32("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));
-    for (UInt32 stage = 1; stage < 16; ++stage) {
+    for (UInt32 stage = 1; stage < 24; ++stage) {
         const auto hits = __atomic_load_n(&VPF::failStageCounts[stage], __ATOMIC_RELAXED);
         if (hits == 0) { continue; }
         char key[24];
