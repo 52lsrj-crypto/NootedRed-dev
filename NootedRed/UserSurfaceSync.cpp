@@ -534,6 +534,19 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
             return result;
         }
         NRed::singleton().setProp32("NRedDiagBaseFound", 1);
+        {
+            // 探测各子缓存在当前上下文是否可读：bit0=头部, bit1=驱动, bit2/3/4=+1G/+2G/+3G 偏移
+            const UInt8 probe[4] = {0, 0, 0, 0};
+            UInt32 mask = 0;
+            if (readUser(base, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 1; }
+            if (readUser(base + DriverTextRelative, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 2; }
+            if (readUser(base + 0x100000000ULL, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 4; }
+            if (readUser(base + 0x200000000ULL, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 8; }
+            if (readUser(base + 0x300000000ULL, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 16; }
+            static UInt32 mapMaskOr{0};
+            mapMaskOr |= mask;
+            NRed::singleton().setProp32("NRedDiagMapMask", mapMaskOr);
+        }
         if (resolved != base) {
             NRed::singleton().setProp32("NRedDiagBaseHintLo", static_cast<UInt32>(base));
             NRed::singleton().setProp32("NRedDiagBaseHintHi", static_cast<UInt32>(base >> 32));
