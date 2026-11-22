@@ -18,6 +18,14 @@
 #include <VPF/TransactionExecutor.hpp>
 #include <kern/task.h>
 #include <mach/i386/vm_param.h>
+
+// 诊断属性统一走采样发布：每 boot 最多 32 次，避免热路径反复写 IORegistry 造成整机卡顿。
+static void diagProp(const char* key, UInt32 value)
+{
+    static UInt32 published{0};
+    if (__atomic_fetch_add(&published, 1, __ATOMIC_RELAXED) >= 32) { return; }
+    NRed::singleton().setProp32(key, value);
+}
 #include <mach/vm_map.h>
 #include <mach/vm_region.h>
 #include <sys/proc.h>
@@ -145,38 +153,47 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
         NRed::singleton().setProp32(uuidKeys[i], value);
     }
     // 诊断：失败阶段码与各阶段计数（不依赖 -NRedRejectTrace）
-    NRed::singleton().setProp32("NRedDiagStage", VPF::lastFailStage);
-    if (VPF::diagTextSize != 0) {
-        NRed::singleton().setProp32("NRedDiagImgAddrLo", static_cast<UInt32>(VPF::diagImgAddr));
-        NRed::singleton().setProp32("NRedDiagImgAddrHi", static_cast<UInt32>(VPF::diagImgAddr >> 32));
-        NRed::singleton().setProp32("NRedDiagTextAddrLo", static_cast<UInt32>(VPF::diagTextAddr));
-        NRed::singleton().setProp32("NRedDiagTextAddrHi", static_cast<UInt32>(VPF::diagTextAddr >> 32));
-        NRed::singleton().setProp32("NRedDiagTextSize", static_cast<UInt32>(VPF::diagTextSize));
-        NRed::singleton().setProp32("NRedDiagSegs", VPF::diagSegs);
-        NRed::singleton().setProp32("NRedDiagFirst4", VPF::diagFirst4);
-        NRed::singleton().setProp32("NRedDiagFirst4Ok", VPF::diagFirst4Ok);
-        NRed::singleton().setProp32("NRedDiagTextReadRc", VPF::diagTextReadRc);
-        NRed::singleton().setProp32("NRedDiagProbe4", VPF::diagProbe4);
-        NRed::singleton().setProp32("NRedDiagProbeOk", VPF::diagProbeOk);
-        NRed::singleton().setProp32("NRedDiagFailFn", VPF::diagFailFn);
-        NRed::singleton().setProp32("NRedDiagCand", VPF::diagCandidates);
-        NRed::singleton().setProp32("NRedDiagFoundLo", VPF::diagFoundAddr);
-        NRed::singleton().setProp32("NRedDiagPhase", VPF::diagPhase);
-        const auto curPid = proc_selfpid();
-        if (curPid > 0) { NRed::singleton().setProp32("NRedDiagCurPID", static_cast<UInt32>(curPid)); }
+    static bool diagSampleFirstCalls = true;
+    {
+        static UInt32 diagCalls = 0;
+        if (__atomic_fetch_add(&diagCalls, 1, __ATOMIC_RELAXED) >= 8) { diagSampleFirstCalls = false; }
     }
-    NRed::singleton().setProp32("NRedDiagBaseLo", static_cast<UInt32>(base));
-    NRed::singleton().setProp32("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));
+    if (diagSampleFirstCalls)
+    {
+    diagProp("NRedDiagStage", VPF::lastFailStage);
+    if (VPF::diagTextSize != 0) {
+        diagProp("NRedDiagImgAddrLo", static_cast<UInt32>(VPF::diagImgAddr));
+        diagProp("NRedDiagImgAddrHi", static_cast<UInt32>(VPF::diagImgAddr >> 32));
+        diagProp("NRedDiagTextAddrLo", static_cast<UInt32>(VPF::diagTextAddr));
+        diagProp("NRedDiagTextAddrHi", static_cast<UInt32>(VPF::diagTextAddr >> 32));
+        diagProp("NRedDiagTextSize", static_cast<UInt32>(VPF::diagTextSize));
+        diagProp("NRedDiagSegs", VPF::diagSegs);
+        diagProp("NRedDiagFirst4", VPF::diagFirst4);
+        diagProp("NRedDiagFirst4Ok", VPF::diagFirst4Ok);
+        diagProp("NRedDiagTextReadRc", VPF::diagTextReadRc);
+        diagProp("NRedDiagProbe4", VPF::diagProbe4);
+        diagProp("NRedDiagProbeOk", VPF::diagProbeOk);
+        diagProp("NRedDiagFailFn", VPF::diagFailFn);
+        diagProp("NRedDiagCand", VPF::diagCandidates);
+        diagProp("NRedDiagFoundLo", VPF::diagFoundAddr);
+        diagProp("NRedDiagPhase", VPF::diagPhase);
+        const auto curPid = proc_selfpid();
+        if (curPid > 0) { diagProp("NRedDiagCurPID", static_cast<UInt32>(curPid)); }
+    }
+    diagProp("NRedDiagBaseLo", static_cast<UInt32>(base));
+    diagProp("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));
+    // 只在某阶段首次命中时发布一次：避免每次补丁尝试都写 IORegistry（实测会造成整机卡顿）。
     for (UInt32 stage = 1; stage < 24; ++stage) {
         const auto hits = __atomic_load_n(&VPF::failStageCounts[stage], __ATOMIC_RELAXED);
-        if (hits == 0) { continue; }
+        if (hits != 1) { continue; }
         char key[24];
         snprintf(key, sizeof(key), "NRedDiagS%u", stage);
         NRed::singleton().setProp32(key, hits);
     }
     if (process != nullptr) {
         const auto diagPid = proc_pid(process);
-        if (diagPid > 0) { NRed::singleton().setProp32("NRedDiagPID", static_cast<UInt32>(diagPid)); }
+        if (diagPid > 0) { diagProp("NRedDiagPID", static_cast<UInt32>(diagPid)); }
+    }
     }
     if (!rejectTrace || count > 32) { return; }
     const auto pid = process != nullptr ? proc_pid(process) : -1;
@@ -262,9 +279,9 @@ namespace
                                      hint ^ 0x40000000ULL, hint ^ 0xC0000000ULL};
         for (const auto candidate : candidates) {
             if (candidate != 0 && candidate != hint && cacheHeaderAt(candidate, h) && driverTextAt(candidate)) {
-                NRed::singleton().setProp32("NRedDiagBaseFlip", 1);
-                NRed::singleton().setProp32("NRedDiagBaseRealLo", static_cast<UInt32>(candidate));
-                NRed::singleton().setProp32("NRedDiagBaseRealHi", static_cast<UInt32>(candidate >> 32));
+                diagProp("NRedDiagBaseFlip", 1);
+                diagProp("NRedDiagBaseRealLo", static_cast<UInt32>(candidate));
+                diagProp("NRedDiagBaseRealHi", static_cast<UInt32>(candidate >> 32));
                 cachedTask = current_task();
                 cachedBase = candidate;
                 memcpy(out, h, sizeof(h));
@@ -272,7 +289,7 @@ namespace
             }
         }
         if (cacheHeaderAt(hint, h) && driverTextAt(hint)) {
-            NRed::singleton().setProp32("NRedDiagBaseDirect", 1);
+            diagProp("NRedDiagBaseDirect", 1);
             cachedTask = current_task();
             cachedBase = hint;
             memcpy(out, h, sizeof(h));
@@ -281,7 +298,7 @@ namespace
         constexpr UInt64 ProbeWindow = 0x20000000ULL;
         for (UInt64 candidate = UserSurfaceSyncData::CacheBase; candidate < UserSurfaceSyncData::CacheBase + ProbeWindow; candidate += PAGE_SIZE) {
             if (cacheHeaderAt(candidate, h) && driverTextAt(candidate)) {
-                NRed::singleton().setProp32("NRedDiagBaseScan", 1);
+                diagProp("NRedDiagBaseScan", 1);
                 cachedTask = current_task();
                 cachedBase = candidate;
                 memcpy(out, h, sizeof(h));
@@ -542,16 +559,16 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
     // vImage），既不是主缓存基址也不是子缓存基址，magic 校验必然不过。x86_64 上主缓存固定从 CacheBase
     // 起映射，slide 不超过头部 maxSlide，因此按页扫描定位真正的主缓存头部。
     {
-        NRed::singleton().setProp32("NRedDiagLastHintLo", static_cast<UInt32>(base));
-        NRed::singleton().setProp32("NRedDiagLastHintHi", static_cast<UInt32>(base >> 32));
+        diagProp("NRedDiagLastHintLo", static_cast<UInt32>(base));
+        diagProp("NRedDiagLastHintHi", static_cast<UInt32>(base >> 32));
         UInt8 found[456];
         const auto resolved = discoverCacheBase(base, found);
         if (resolved == 0) {
-            NRed::singleton().setProp32("NRedDiagBaseNotFound", 1);
+            diagProp("NRedDiagBaseNotFound", 1);
             stage(Stage::CacheMismatch);
             return result;
         }
-        NRed::singleton().setProp32("NRedDiagBaseFound", 1);
+        diagProp("NRedDiagBaseFound", 1);
         {
             // 探测各子缓存在当前上下文是否可读：bit0=头部, bit1=驱动, bit2/3/4=+1G/+2G/+3G 偏移
             const UInt8 probe[4] = {0, 0, 0, 0};
@@ -563,19 +580,19 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
             if (readUser(base + 0x300000000ULL, const_cast<UInt8*>(probe), sizeof(probe)) == 0) { mask |= 16; }
             static UInt32 mapMaskOr{0};
             mapMaskOr |= mask;
-            NRed::singleton().setProp32("NRedDiagMapMask", mapMaskOr);
+            diagProp("NRedDiagMapMask", mapMaskOr);
         }
         if (resolved != base) {
-            NRed::singleton().setProp32("NRedDiagBaseHintLo", static_cast<UInt32>(base));
-            NRed::singleton().setProp32("NRedDiagBaseHintHi", static_cast<UInt32>(base >> 32));
-            NRed::singleton().setProp32("NRedDiagBaseSlide", static_cast<UInt32>(resolved - CacheBase));
+            diagProp("NRedDiagBaseHintLo", static_cast<UInt32>(base));
+            diagProp("NRedDiagBaseHintHi", static_cast<UInt32>(base >> 32));
+            diagProp("NRedDiagBaseSlide", static_cast<UInt32>(resolved - CacheBase));
             base = resolved;
         }
         memcpy(header, found, sizeof(header));
-        NRed::singleton().setProp32("NRedDiagLastPid", static_cast<UInt32>(proc_pid(process)));
-        NRed::singleton().setProp32("NRedDiagLastBaseLo", static_cast<UInt32>(base));
-        NRed::singleton().setProp32("NRedDiagLastBaseHi", static_cast<UInt32>(base >> 32));
-        NRed::singleton().setProp32("NRedDiagLastProbe", submitProbeAt(base) ? 1 : 0);
+        diagProp("NRedDiagLastPid", static_cast<UInt32>(proc_pid(process)));
+        diagProp("NRedDiagLastBaseLo", static_cast<UInt32>(base));
+        diagProp("NRedDiagLastBaseHi", static_cast<UInt32>(base >> 32));
+        diagProp("NRedDiagLastProbe", submitProbeAt(base) ? 1 : 0);
     }
     auto&      plan            = workspace.value->plan;
     auto&      input           = plan.input;
@@ -583,8 +600,8 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
     input.scanBuffer           = plan.scan;
     if (!publishedGoodBase) {
         publishedGoodBase = true;
-        NRed::singleton().setProp32("NRedDiagGoodBaseLo", static_cast<UInt32>(base));
-        NRed::singleton().setProp32("NRedDiagGoodBaseHi", static_cast<UInt32>(base >> 32));
+        diagProp("NRedDiagGoodBaseLo", static_cast<UInt32>(base));
+        diagProp("NRedDiagGoodBaseHi", static_cast<UInt32>(base >> 32));
     }
     const auto        major    = currentKernelVersion().major();
     const auto        deviceID = NRed::singleton().getDeviceID();

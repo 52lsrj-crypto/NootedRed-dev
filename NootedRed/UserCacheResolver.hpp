@@ -89,7 +89,7 @@ namespace UserCacheResolver
                     j = UInt32(next - scan) - anchor->offset;
                 }
                 if (!prefixMatches(scan + j)) { continue; }
-                if (++input.candidates > 128) { return false; }
+                if (++input.candidates > 2048) { return false; }
                 const auto address = text.address + offset + j;
                 if (!candidateMatches(address)) { continue; }
                 if (found) { return false; }
