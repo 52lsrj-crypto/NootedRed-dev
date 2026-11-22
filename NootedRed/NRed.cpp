@@ -72,7 +72,8 @@ void NRed::init()
             UserPatchCoordinator::configureDisplay(checkKernelArgument("-NRedDisplayFix"),
                                                    currentKernelVersion().major());
             UserProcessFilter::init(patcher);
-            UserSurfaceSync::init(patcher);
+            // 15.8.3 上 Metal 面页补丁夹具不匹配且重算语义不等价（曾致开机黑屏），改为默认不装
+            if (checkKernelArgument("-NRedSurfacePatch")) { UserSurfaceSync::init(patcher); }
             UserOpenGL::init(patcher);
             UserVideoDecode::init(patcher);
             UserPatchCoordinator::init(patcher);
