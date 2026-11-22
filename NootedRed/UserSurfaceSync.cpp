@@ -173,6 +173,7 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
 RejectSite submitRejects, displayRejects;
 UserRejectedCaches::Table rejectedCaches;
 UInt32                    rejectedSkips{0};
+bool                      publishedGoodBase{false};
 const char* const         submitRejectUUIDKeys[]  = {"NRedSubmitGuardRejectUUID0", "NRedSubmitGuardRejectUUID1",
                                                      "NRedSubmitGuardRejectUUID2", "NRedSubmitGuardRejectUUID3"};
 const char* const         displayRejectUUIDKeys[] = {"NRedImmediateSyncRejectUUID0", "NRedImmediateSyncRejectUUID1",
@@ -421,13 +422,34 @@ int patchSharedRegion(proc_t process, SharedRegionCheckArgs* args, const int res
         return result;
     }
     if (memcmp(header, CacheMagic, sizeof(CacheMagic)) != 0) {
-        stage(Stage::CacheMismatch);
-        return result;
+        // 15.8.3 实测：部分进程给出的 startAddress 并非"指向共享缓存基址的指针"，
+        // 读出来的 base 落在其它镜像的代码段（本例落在 vImage __TEXT），magic 不符。
+        // x86_64 共享缓存固定映射在 CacheBase，回退到该地址并重新校验。
+        UInt8 fallback[104];
+        if (readUser(CacheBase, fallback, sizeof(fallback)) == 0
+            && memcmp(fallback, CacheMagic, sizeof(CacheMagic)) == 0)
+        {
+            base = CacheBase;
+            memcpy(header, fallback, sizeof(header));
+            NRed::singleton().setProp32("NRedDiagBaseFixed", 1);
+            stage(Stage::Called);
+        }
+        else
+        {
+            NRed::singleton().setProp32("NRedDiagBaseFallbackFailed", 1);
+            stage(Stage::CacheMismatch);
+            return result;
+        }
     }
     auto&      plan            = workspace.value->plan;
     auto&      input           = plan.input;
     input.reader               = readUser;
     input.scanBuffer           = plan.scan;
+    if (!publishedGoodBase) {
+        publishedGoodBase = true;
+        NRed::singleton().setProp32("NRedDiagGoodBaseLo", static_cast<UInt32>(base));
+        NRed::singleton().setProp32("NRedDiagGoodBaseHi", static_cast<UInt32>(base >> 32));
+    }
     const auto        major    = currentKernelVersion().major();
     const auto        deviceID = NRed::singleton().getDeviceID();
     vm_map_t          map      = getTaskMap(current_task());
