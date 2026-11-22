@@ -14,6 +14,7 @@
 #include <VPF/ExecutableTrampolineResource.hpp>
 #include <VPF/MetalTransactionExecutor.hpp>
 #include <VPF/ResolutionDiagnostics.hpp>
+#include <VPF/ResolutionDiag.hpp>
 #include <VPF/TransactionExecutor.hpp>
 #include <kern/task.h>
 #include <mach/i386/vm_param.h>
@@ -142,6 +143,21 @@ void reportRejection(RejectSite& site, const char* countKey, const char* pidKey,
         UInt32 value;
         memcpy(&value, uuid + i * 4, sizeof(value));
         NRed::singleton().setProp32(uuidKeys[i], value);
+    }
+    // 诊断：解析失败的具体阶段码与各阶段累计次数（始终发布，不依赖 -NRedRejectTrace）。
+    NRed::singleton().setProp32("NRedDiagStage", __atomic_load_n(&VPF::lastFailStage, __ATOMIC_RELAXED));
+    NRed::singleton().setProp32("NRedDiagBaseLo", static_cast<UInt32>(base));
+    NRed::singleton().setProp32("NRedDiagBaseHi", static_cast<UInt32>(base >> 32));
+    for (UInt32 stage = 1; stage < 16; ++stage) {
+        const auto hits = __atomic_load_n(&VPF::failStageCounts[stage], __ATOMIC_RELAXED);
+        if (hits == 0) { continue; }
+        char key[24];
+        snprintf(key, sizeof(key), "NRedDiagS%u", stage);
+        NRed::singleton().setProp32(key, hits);
+    }
+    if (process != nullptr) {
+        const auto diagPid = proc_pid(process);
+        if (diagPid > 0) { NRed::singleton().setProp32("NRedDiagPID", static_cast<UInt32>(diagPid)); }
     }
     if (!rejectTrace || count > 32) { return; }
     const auto pid = process != nullptr ? proc_pid(process) : -1;

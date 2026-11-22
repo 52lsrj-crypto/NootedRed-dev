@@ -6,6 +6,7 @@
 #include <UserSurfaceConstructorData.hpp>
 #include <UserSurfaceSyncData.hpp>
 #include <VPF/FastResolution.hpp>
+#include <VPF/ResolutionDiag.hpp>
 #include <string.h>
 
 namespace UserSurfaceSyncResolver
@@ -200,8 +201,12 @@ namespace UserSurfaceSyncResolver
         auto& image = plan.image;
         memset(&image, 0, sizeof(image));
         // Scratch 按完整函数和实际相对引用核验。
-        if (scratchMode && !resolveScratch(input, base, device, plan, fast)) { return false; }
-        if (!imageForCache(input, base, image)) { return false; }
+        if (scratchMode && !resolveScratch(input, base, device, plan, fast))
+        {
+            VPF::markFail(VPF::FailScratch);
+            return false;
+        }
+        if (!imageForCache(input, base, image)) { VPF::markFail(VPF::FailDisplayImage); return false; }
 
         constexpr UInt32 MaxCoreFunctions       = 5;
         const UInt32     TotalFunctions         = scratchMode ? 4 : 5;
@@ -438,7 +443,11 @@ namespace UserSurfaceSyncResolver
         static_assert(Locations == 4);
         static_assert(Images <= sizeof(plan.sequoiaImages) / sizeof(plan.sequoiaImages[0]) && Functions <= 32);
         auto& bounds = plan.sequoiaImages;
-        if (!UserCacheResolver::resolveImages(input, base, ResolverImages, bounds)) { return false; }
+        if (!UserCacheResolver::resolveImages(input, base, ResolverImages, bounds))
+        {
+            VPF::markFail(VPF::FailResolveImages);
+            return false;
+        }
         UInt32 functionImages[Functions]{};
         for (UInt32 i = 0; i < Functions; ++i) { functionImages[i] = ResolverFunctions[i].image; }
         UserCacheResolver::KnownLocation known[Functions]{};
@@ -466,7 +475,11 @@ namespace UserSurfaceSyncResolver
                                                            &plan.patched[0][0], Plan::BufferSize, bounds, false,
                                                            nullptr, 0, nullptr, located);
         }
-        if (!resolved) { return false; }
+        if (!resolved)
+        {
+            VPF::markFail(VPF::FailDisplayOther);
+            return false;
+        }
         const auto& init = ResolverFunctions[0];
         UInt64      constant{0}, dump{0};
         UInt8       value[4], dumpBytes[sizeof(NativeDump)];
@@ -534,10 +547,10 @@ namespace UserSurfaceSyncResolver
                                      VPF::FastResolution* fast)
     {
         Image image;
-        if (!imageForCache(input, base, image)) { return false; }
-        if (image.segmentCount > 8 || fn.size < 32) { return false; }
+        if (!imageForCache(input, base, image)) { VPF::markFail(VPF::FailImageForCache); return false; }
+        if (image.segmentCount > 8 || fn.size < 32) { VPF::markFail(VPF::FailSegmentOrSize); return false; }
         UserCacheResolver::ImageBounds bounds{};
-        if (!imageBounds(image, bounds)) { return false; }
+        if (!imageBounds(image, bounds)) { VPF::markFail(VPF::FailImageBounds); return false; }
         const UserCacheResolver::ImageReference refs[1]           = {{DriverPath, sizeof(DriverPath)}};
         UInt32                                  functionImages[1] = {0};
         UserCacheResolver::KnownLocation        known[1]{};
@@ -558,7 +571,7 @@ namespace UserSurfaceSyncResolver
         const auto                    candidate = [&](UInt64 address)
         {
             UInt8 entry[15];
-            if (!input.read(address, entry, sizeof(entry))) { return false; }
+            if (!input.read(address, entry, sizeof(entry))) { VPF::markFail(VPF::FailEntryRead); return false; }
             const bool installed = memcmp(entry, "\xff\x25\0\0\0\0", 6) == 0 && entry[14] == 0x90;
             if (!UserCacheResolver::matchBytes(input, address, fn.size,
                                                [&](UInt32 i, UInt8 value)
@@ -569,20 +582,20 @@ namespace UserSurfaceSyncResolver
                                                           || value == fn.original[i];
                                                }))
             {
+                VPF::markFail(VPF::FailEntryBytes);
                 return false;
             }
             for (UInt32 r = 0; r < fn.originalCount; ++r) {
                 const auto& ref = fn.originalRefs[r];
                 UInt8       field[4];
                 UInt64      target{0}, expected{0};
-                if (ref.indirect || ref.image != 0 || !input.read(address + ref.offset, field, 4)
-                    || !relativeTarget(address + ref.offset, 0, field, target) || !image.contains(target, 4)
-                    || !UserCacheResolver::target(input, ref, &bounds, 1, ResolverImages, &fn, &address, 1, expected,
-                                                  sectionRelative)
-                    || target != expected)
-                {
-                    return false;
-                }
+                if (ref.indirect || ref.image != 0) { VPF::markFail(VPF::FailRefRead); return false; }
+                if (!input.read(address + ref.offset, field, 4)) { VPF::markFail(VPF::FailRefRead); return false; }
+                if (!relativeTarget(address + ref.offset, 0, field, target)) { VPF::markFail(VPF::FailRefRead); return false; }
+                if (!image.contains(target, 4)) { VPF::markFail(VPF::FailRefContains); return false; }
+                if (!UserCacheResolver::target(input, ref, &bounds, 1, ResolverImages, &fn, &address, 1, expected,
+                                               sectionRelative)) { VPF::markFail(VPF::FailRefTarget); return false; }
+                if (target != expected) { VPF::markFail(VPF::FailRefMismatch); return false; }
             }
             return true;
         };
@@ -607,6 +620,7 @@ namespace UserSurfaceSyncResolver
                 [&](const UInt8* bytes) { return prefixes[0].matches(bytes) || prefixes[1].matches(bytes); }, candidate,
                 found, 0, anchored ? &anchor : nullptr))
         {
+            VPF::markFail(VPF::FailScan);
             return false;
         }
         offset = found - base;
